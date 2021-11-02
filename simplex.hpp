@@ -19,6 +19,27 @@ private:
     std::vector<std::vector<T>> c;
     std::vector<T> b;
     std::vector<int> help;
+
+    void addToBasis(size_t s, size_t r, T eps) {
+        size_t m = c.size();
+        size_t n = c[0].size();
+        T mul = T(1) / c[r][s];
+        for (auto &x : c[r])
+            x *= mul;
+        c[r][s] = 1;
+        b[r] *= mul;
+        for (size_t i = 0; i < m; ++i) {
+            if (i == r)
+                continue;
+            T mul = c[i][s];
+            #pragma GCC ivdep
+            for (size_t j = 0; j < n; ++j) {
+                c[i][j] -= c[r][j] * mul;
+            }
+            b[i] -= b[r] * mul;
+            ASSERT(b[i] >= -eps);
+        }
+    }
 public:
     Solver(size_t vars): vars(vars) {}
     void addLeConstraint(std::vector<T> coefs, T v) {
@@ -58,24 +79,9 @@ public:
             });
             ASSERT(r_it != candidates.end());
             auto r = *r_it;
-            T mul = T(1) / c[r][s];
-            for (auto &x : c[r])
-                x *= mul;
-            c[r][s] = 1;
-            b[r] *= mul;
-            for (size_t i = 0; i < m; ++i) {
-                if (i == r)
-                    continue;
-                T mul = c[i][s];
-                #pragma GCC ivdep
-                for (size_t j = 0; j < n; ++j) {
-                    c[i][j] -= c[r][j] * mul;
-                }
-                b[i] -= b[r] * mul;
-                ASSERT(b[i] >= -eps);
-            }
+            addToBasis(s, r, eps);
             basis[r] = s;
-            mul = coefs[s];
+            auto mul = coefs[s];
             #pragma GCC ivdep
             for (size_t i = 0; i < n; ++i) {
                 coefs[i] -= c[r][i] * mul;
@@ -121,9 +127,40 @@ public:
             phase(std::move(help_coefs), help_ans, basis, eps);
             ASSERT(std::abs(help_ans) <= eps);
             size_t target = n + help.size();
-            for (size_t x : basis) {
-                ASSERT(x < n || x == target);
+
+            size_t bs = basis.size();
+            for (size_t i = 0; i < basis.size(); ++i) {
+                size_t x = basis[i];
+                if (x >= n && x != target) {
+                    ASSERT(std::abs(b[i]) <= eps);
+                    size_t nv = x;
+                    if (std::abs(c[i][target]) > eps) {
+                        nv = target;
+                    } else {
+                        for (size_t j = 0; j < n; ++j) {
+                            if (std::abs(c[i][j]) > eps) {
+                                nv = j;
+                                break;
+                            }
+                        }
+                    }
+                    if (nv == x) {
+                        --bs;
+                        --m;
+                        std::swap(basis[i], basis[bs]);
+                        std::swap(b[i], b[bs]);
+                        c[i].swap(c[bs]);
+                        --i;
+                    } else {
+                        addToBasis(nv, i, eps);
+                        basis[i] = nv;
+                    }
+                }
             }
+            c.erase(c.begin() + bs, c.end());
+            b.erase(b.begin() + bs, b.end());
+            basis.erase(basis.begin() + bs, basis.end());
+
             for (auto &v : c)
                 v.resize(n);
             size_t r = std::ranges::find(basis, target) - basis.begin();

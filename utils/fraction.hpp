@@ -157,6 +157,11 @@ template<class Int>
     return f.num / f.denom + bool(f.num % f.denom);
 }
 
+template<class Int>
+[[nodiscard]] inline Int round(const Fraction<Int> &f) {
+    return f.num / f.denom + bool(f.num % f.denom * 2 >= f.denom);
+}
+
 };
 
 
