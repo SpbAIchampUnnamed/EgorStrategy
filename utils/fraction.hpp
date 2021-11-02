@@ -32,19 +32,33 @@ struct Fraction {
         } else {
             u.d = d;
             uint64_t mantisa = u.bits & ((1ll << 52) - 1) | 1ll << 52;
-            num = mantisa;
             denom = 1;
             int exp = u.bits >> 52 & ((1ll << 11) - 1);
             exp -= 1023;
-            if (exp >= 0 && exp < (int) sizeof(Int) * 8 - 1) {
-                num <<= exp;
-            } else if (exp < 0 && -exp < (int) sizeof(Int) * 8 - 1) {
-                denom <<= -exp;
-            } else if (exp < 0) {
-                num = 0;
-            } else {
+            exp -= 52;
+            if constexpr (sizeof(Int) * 8 - 2 < 52) {
+                mantisa >>= ((54 - sizeof(Int) * 8));
+                exp += ((54 - sizeof(Int) * 8));
+            }
+            while ((mantisa & 1) == 0 && exp < 0) {
+                mantisa >>= 1;
+                ++exp;
+            }
+            num = mantisa;
+            if (exp > 0) {
                 num = std::numeric_limits<Int>::max();
                 denom = 1;
+            } else if (exp >= -(int) sizeof(Int) * 8 - 2) {
+                denom <<= -exp;
+            } else if (exp >= -2 * ((int) sizeof(Int) * 8 - 2)) {
+                denom <<= sizeof(Int) * 8 - 2;
+                num >>= -exp - (sizeof(Int) * 8 - 2);
+            } else {
+                num = 0;
+            }
+            while ((denom & 1) == 0 && (num & 1) == 0) {
+                denom >>= 1;
+                num >>= 1;
             }
             if (u.bits >> 63) {
                 num = -num;
