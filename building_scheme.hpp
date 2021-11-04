@@ -25,4 +25,8 @@ struct BuildingScheme {
 
 BuildingScheme getInitialScheme();
 
+double estimateBuildingScheme(BuildingScheme &buildingScheme);
+
+void improveBuildingScheme(BuildingScheme &buildingScheme);
+
 #endif

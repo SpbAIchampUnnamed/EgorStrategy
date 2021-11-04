@@ -319,7 +319,7 @@ BuildingScheme getInitialScheme() {
             }
         }
         cerr << "total_robots = " << robots << " + " << best_scheme.cost << " = " << robots + best_scheme.cost << "\n";
-        if (robots + best_scheme.cost <= my_robots) {
+        if (robots + best_scheme.cost <= my_robots) {   
             return best_scheme;
         }
     }

@@ -10,6 +10,8 @@ namespace precalc {
 extern Graph<> planets_graph;
 extern std::vector<std::vector<int>> d;
 extern std::vector<std::vector<int>> prev;
+extern std::vector<std::vector<int>> real_distance;
+extern std::vector<std::vector<int>> near_planets;
 
 template<class F>
 void calcDistances(F &&dist) {
@@ -21,6 +23,7 @@ void calcDistances(F &&dist) {
         prev[i] = std::move(pr);
     }
 }
+
 
 void prepare();
 
