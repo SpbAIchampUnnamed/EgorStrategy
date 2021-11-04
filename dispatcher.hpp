@@ -83,6 +83,8 @@ public:
                 controled.moves[index[i]].workerNumber += action.moves[i].workerNumber;
             }
         }
+        if (action.chooseSpecialty)
+            controled.chooseSpecialty = action.chooseSpecialty;
         controled.buildings.insert(controled.buildings.end(), action.buildings.begin(), action.buildings.end());
         return wait(ticks, priority);
     }
