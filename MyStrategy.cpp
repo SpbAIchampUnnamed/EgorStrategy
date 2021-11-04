@@ -550,7 +550,12 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 }
             }
 
-            auto [prod, new_transfers] = getTransfersByDistribution<Fraction<long long>>(distribution, robots);
+            #warning "Only for testing, it does not work correctly"
+            auto scheme = getTransfersByDistribution<Fraction<long long>>(distribution, {robots, robots, robots});
+            auto &prod = scheme.prod;
+            auto &new_transfers = scheme.transfers;
+
+
             auto cmp = [&](int x, int y) {
                 auto &xt = transfers[x];
                 auto &yt = transfers[y];
