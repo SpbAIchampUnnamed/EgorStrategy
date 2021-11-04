@@ -612,7 +612,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             cerr << prod << " robots per tick\n";
 
             batching_factor = ceil(Fraction<long long>(ranges::reduce(transfers | views::transform([](auto &t) {
-                return precalc::d[t.from][t.to] / game.planets.size();
+                return precalc::real_distance(t.from, t.to);
             }), 0), game.maxFlyingWorkerGroups));
 
             cerr << "batching_factor = " << batching_factor << "\n";
@@ -788,7 +788,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         int len = 0;
         for (auto i : path) {
             auto [from, to, cnt, res] = transfers[i];
-            len += precalc::d[from][to] / game.planets.size();
+            len += precalc::real_distance(from, to);
         }
         for (auto i : path) {
             flow[i] += Fraction(cnt, len);
@@ -932,8 +932,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 auto [from, to, cnt, res] = transfers[i];
                 if (game.planets[from].building && flow[i] < cnt) {
                     outputs.emplace_back(from);
-                    ASSERT(ceil(precalc::d[from][to] / game.planets.size() * (cnt - flow[i])) > 0);
-                    g.addEdge(from, t, 0, ceil(precalc::d[from][to] / game.planets.size() * (cnt - flow[i])));
+                    ASSERT(ceil(precalc::real_distance(from, to) * (cnt - flow[i])) > 0);
+                    g.addEdge(from, t, 0, ceil(precalc::real_distance(from, to) * (cnt - flow[i])));
                 }
             }
             ranges::sort(outputs);
@@ -985,7 +985,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
 void MyStrategy::play(Runner &runner)
 {
-    precalc::prepare(Specialty::PRODUCTION);
+    precalc::prepare();
 
     TaskQueue queue;
     Action act;

@@ -171,7 +171,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
         vector<CalcType> limit_coefs(var_cnt, 0);
         for (auto [f, ftype] : distribution) {
             for (auto [t, ttype] : distribution) {
-                int d = (spec == Specialty::LOGISTICS ? precalc::logist_d : precalc::regular_d)[f][t] / game.planets.size();
+                int d = (spec == Specialty::LOGISTICS ? precalc::logist_real_distance(f, t) : precalc::regular_real_distance(f, t));
                 if (balance[(int) ftype] > 0 && balance[(int) ttype] < 0)
                     limit_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, nullopt, spec}) - trans_vars.begin()] = d;
             }

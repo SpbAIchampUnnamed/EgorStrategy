@@ -3,13 +3,12 @@
 
 #include <vector>
 #include <ranges>
+#include "const.hpp"
 #include "graph.hpp"
 #include "model/Game.hpp"
 
 namespace precalc {
 
-extern Graph<> planets_graph;
-extern std::vector<std::vector<int>> real_distance;
 extern std::vector<std::vector<int>> near_planets;
 extern Graph<> regular_planets_graph;
 extern Graph<> logist_planets_graph;
@@ -32,6 +31,18 @@ void calcDistances(auto &planets_graph, auto &d, auto &prev, F &&dist) {
 }
 
 void prepare(model::Specialty = model::Specialty::COMBAT);
+
+inline int real_distance(int x, int y) {
+    return d[x][y] >> constants::planet_bits;
+}
+
+inline int logist_real_distance(int x, int y) {
+    return logist_d[x][y] >> constants::planet_bits;
+}
+
+inline int regular_real_distance(int x, int y) {
+    return regular_d[x][y] >> constants::planet_bits;
+}
 
 };
 

@@ -56,7 +56,7 @@ BuildingScheme getInitialScheme() {
             {
                 for (auto [vertex_from, planet_from] : from_mapping) {
                     for (auto [vertex_to, planet_to] : to_mapping) {
-                        g.addEdge(vertex_from, vertex_to, precalc::d[planet_from][planet_to] / game.planets.size());
+                        g.addEdge(vertex_from, vertex_to, precalc::real_distance(planet_from, planet_to));
                     }
                 }
                 ranges::sort(to_mapping);
@@ -280,7 +280,7 @@ BuildingScheme getInitialScheme() {
             vector<CalcType> target_coefs(var_cnt, 0);
             for (auto [f, ftype] : distribution) {
                 for (auto [t, ttype] : distribution) {
-                    int d = precalc::d[f][t] / game.planets.size();
+                    int d = precalc::real_distance(f, t);
                     if (balance[(int) ftype] > 0 && balance[(int) ttype] < 0)
                         target_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, nullopt}) - trans_vars.begin()] = d;
                     auto res = game.buildingProperties.at(ftype).produceResource;
@@ -295,7 +295,7 @@ BuildingScheme getInitialScheme() {
                 if (t[i] > 0) {
                     auto [from, to, res] = trans_vars[i];
                     transfers.emplace_back(from, to, round(t[i]), res);
-                    scheme.cost += precalc::d[from][to] / game.planets.size() * round(t[i]);
+                    scheme.cost += precalc::real_distance(from, to) * round(t[i]);
                 }
             }
             if (scheme.cost < best_scheme.cost) {
