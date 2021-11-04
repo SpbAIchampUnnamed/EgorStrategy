@@ -18,6 +18,7 @@
 #include <queue>
 #include <unordered_set>
 #include <random>
+#include <set>
 
 using namespace std;
 using namespace model;
@@ -555,6 +556,28 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             auto &prod = scheme.prod;
             auto &new_transfers = scheme.transfers;
 
+            cerr << prod << "\n";
+
+            for (size_t i = 0; i < new_transfers.size(); ++i) {
+                auto [from, to, count, res] = new_transfers[i];
+                auto spec = scheme.specialty[i];
+                cerr << from << "\t" << to << "\t" << count << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7);
+                cerr << "\t" << to_string(spec).substr(0, 7) << "\n";
+            }
+
+            cerr << "\n";
+
+            for (size_t i = 0; i < distribution.size(); ++i) {
+                auto [p, type] = distribution[i];
+                for (auto spec : EnumValues<Specialty>::list) {
+                    if (scheme.static_robots[i][(int) spec] > 0) {
+                        cerr << scheme.static_robots[i][(int) spec] << "\trobots of " << to_string(spec).substr(0, 7) << "\ton ";
+                        cerr << p << "\t" << to_string(type) << "\n";
+                    }
+                }
+            }
+
+            terminate();
 
             auto cmp = [&](int x, int y) {
                 auto &xt = transfers[x];
@@ -620,7 +643,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             }
             ranges::transform(pre_static_robots, static_robots.begin(), [](auto &x) { return ceil(x); });
 
-            unordered_set<BuildingType> full;
+            set<BuildingType> full;
 
             for (auto [p, type] : distribution)
                 full.emplace(type);
