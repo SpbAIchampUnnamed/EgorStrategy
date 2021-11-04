@@ -24,7 +24,7 @@ struct ActionController {
         reservedResources(model::game.planets.size()) {}
 
     template<class Callback>
-    coro::Task<bool> move(int from, int to, int count, std::optional<model::Resource> res, Callback &&callback) {
+    coro::Task<bool> move(int from, int to, int count, std::optional<model::Resource> res, Callback callback) {
         onWayTo[to] += count;
         for (int i = from, next = 0; i != to; i = next) {
             if (callback(i)) {
