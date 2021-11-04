@@ -60,7 +60,7 @@ namespace precalc {
                 near_planets[i][j] = j;
             }
             sort(near_planets[i].begin(), near_planets[i].end(), [i](int a, int b) {
-                return d[a][i] < d[b][i];
+                return pair(regular_d[a][i], a) < pair(regular_d[b][i], b);
             });
         }
     }
