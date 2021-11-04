@@ -10,6 +10,7 @@
 namespace precalc {
 
 extern std::vector<std::vector<int>> near_planets;
+extern std::vector <std::vector<int>> real_distance_logist;
 extern Graph<> regular_planets_graph;
 extern Graph<> logist_planets_graph;
 extern std::vector<std::vector<int>> regular_prev;
