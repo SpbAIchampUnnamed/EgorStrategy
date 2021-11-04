@@ -985,7 +985,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
 void MyStrategy::play(Runner &runner)
 {
-    precalc::prepare();
+    precalc::prepare(Specialty::PRODUCTION);
 
     TaskQueue queue;
     Action act;
