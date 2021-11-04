@@ -13,7 +13,7 @@
 struct Transfer {
     int from, to;
     Fraction<long long> count;
-    std::optional<model::Resource> res;
+    std::optional<model::Resource> res = std::nullopt;
 };
 
 struct BuildingScheme {
