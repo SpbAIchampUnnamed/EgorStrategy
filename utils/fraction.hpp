@@ -10,7 +10,7 @@
 template<std::integral Int = int>
 struct Fraction {
     Int num, denom;
-    Fraction(Int num = 0, Int denom = 1): num(num), denom(denom) {
+    Fract   ion(Int num = 0, Int denom = 1): num(num), denom(denom) {
         normalize();
         normalize_sign();
     }

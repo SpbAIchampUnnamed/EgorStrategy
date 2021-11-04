@@ -17,8 +17,6 @@ namespace precalc {
     std::vector <std::vector<int>> logist_d;
     std::ranges::subrange< decltype(regular_d)::iterator> d;
     std::ranges::subrange< decltype(regular_prev)::iterator> prev;
-    std::vector <std::vector<int>> real_distance;
-    std::vector <std::vector<int>> real_distance_logist;
     std::vector <std::vector<int>> near_planets;
 
     void prepare(model::Specialty s) {
@@ -39,40 +37,31 @@ namespace precalc {
         calcDistances(regular_planets_graph, regular_d, regular_prev, [](int a, int b) {
             if (a == b)
                 return pair(b, 0);
-            return pair(b, planets_dist(game.planets[a], game.planets[b]) * (int) game.planets.size() + 1);
+            return pair(b, planets_dist(game.planets[a], game.planets[b]) << constants::planet_bits | 1);
         });
         calcDistances(logist_planets_graph, logist_d, logist_prev, [](int a, int b) {
             if (a == b)
                 return pair(b, 0);
-            return pair(b, planets_dist(game.planets[a], game.planets[b]) * (int) game.planets.size() + 1);
+            return pair(b, planets_dist(game.planets[a], game.planets[b]) << constants::planet_bits | 1);
         });
-        real_distance.resize(game.planets.size());
-        real_distance_logist.resize(game.planets.size());
-        for (int i = 0; i < game.planets.size(); i++) {
-            real_distance[i].resize(game.planets.size());
-            real_distance_logist[i].resize(game.planets.size());
-            for (int j = 0; j < game.planets.size(); j++) {
-                real_distance[i][j] = regular_d[i][j] / game.planets.size();
-                real_distance_logist[i][j] = logist_d[i][j] / game.planets.size();
-            }
+
+        if (s == Specialty::LOGISTICS) {
+            d = decltype(d)(logist_d.begin(), logist_d.end());
+            prev = decltype(prev)(logist_prev.begin(), logist_prev.end());
+        } else {
+            d = decltype(d)(regular_d.begin(), regular_d.end());
+            prev = decltype(prev)(regular_prev.begin(), regular_prev.end());
         }
+)
         near_planets.resize(game.planets.size());
-        for (auto i = 0; i < game.planets.size(); i++) {
+        for (size_t i = 0; i < game.planets.size(); i++) {
             near_planets[i].resize(game.planets.size());
-            for (int j = 0; j < game.planets.size(); j++) {
+            for (size_t j = 0; j < game.planets.size(); j++) {
                 near_planets[i][j] = j;
             }
             sort(near_planets[i].begin(), near_planets[i].end(), [i](int a, int b) {
-                return real_distance[a][i] < real_distance[b][i];
+                return regular_real_distance()[a][i] < d[b][i];
             });
-
-            if (s == Specialty::LOGISTICS) {
-                d = decltype(d)(logist_d.begin(), logist_d.end());
-                prev = decltype(prev)(logist_prev.begin(), logist_prev.end());
-            } else {
-                d = decltype(d)(regular_d.begin(), regular_d.end());
-                prev = decltype(prev)(regular_prev.begin(), regular_prev.end());
-            }
         }
     }
 

@@ -2,6 +2,8 @@
 #define __CONST_HPP__
 
 namespace constants {
+    constexpr int planet_bits = 9;
+
     constexpr int stone_reserve_size = 1000;
     constexpr int product_planing_horizon = 100;
 

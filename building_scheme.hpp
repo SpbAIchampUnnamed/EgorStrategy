@@ -14,6 +14,11 @@ struct Transfer {
     int from, to;
     Fraction<long long> count;
     std::optional<model::Resource> res = std::nullopt;
+
+    string toString() {
+        return "from: " + std::toString(from) + ", to: " + std::toString(to) + ", count " +
+        std::ceil(count) + ", res" + res;
+    }
 };
 
 struct BuildingScheme {
