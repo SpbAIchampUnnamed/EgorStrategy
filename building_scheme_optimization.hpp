@@ -63,6 +63,19 @@ ProductionScheme<CalcType> getTransfersByDistribution(
 
     ranges::sort(trans_vars);
     simplex_method::Solver<CalcType> solver(var_cnt);
+
+    // worker count <= maxWorkers
+    for (size_t i = 0; i < distribution.size(); ++i) {
+        auto [p, type] = distribution[i];
+        auto &bp = game.buildingProperties.at(type);
+        vector<CalcType> coefs(var_cnt, 0);
+        for (auto index : static_vars_index)
+            coefs[index + i] = 1;
+        solver.addLeConstraint(move(coefs), bp.maxWorkers);
+    }
+
+    // output * workAmount - work * produceAmount <= 0
+    // output / produceAmount <= work * workAmount
     for (size_t i = 0; i < distribution.size(); ++i) {
         auto [p, type] = distribution[i];
         auto &bp = game.buildingProperties.at(type);
@@ -70,19 +83,22 @@ ProductionScheme<CalcType> getTransfersByDistribution(
             continue;
         vector<CalcType> coefs(var_cnt, 0);
         for (auto index : static_vars_index)
-            coefs[index + i] = 1;
-        solver.addLeConstraint(coefs, bp.maxWorkers);
-        coefs[static_vars_index[(int) Specialty::PRODUCTION] + i] += CalcType(game.productionUpgrade) / 100;
+            coefs[index + i] = -1;
+        coefs[static_vars_index[(int) Specialty::PRODUCTION] + i] -= CalcType(game.productionUpgrade) / 100;
+        for (auto index : static_vars_index)
+            coefs[index + i] *= bp.produceAmount;
         for (auto [t, type] : distribution) {
             if (!game.buildingProperties.at(type).workResources.contains(*bp.produceResource))
                 continue;
             for (auto spec : EnumValues<Specialty>::list) {
                 auto index = ranges::lower_bound(trans_vars, TransVar{p, t, bp.produceResource, spec}) - trans_vars.begin();
-                coefs[trans_vars_index + index] = -1;
-            }   
+                coefs[trans_vars_index + index] = bp.workAmount;
+            }
         }
         solver.addLeConstraint(move(coefs), 0);
     }
+
+    // robots_in = robots_out
     for (auto [p, type] : distribution) {
         auto &bp = game.buildingProperties.at(type);
         vector<CalcType> coefs(var_cnt, 0);
@@ -122,47 +138,35 @@ ProductionScheme<CalcType> getTransfersByDistribution(
             x = -x;
         solver.addLeConstraint(move(coefs), 0);
     }
-    for (auto [p, type] : distribution) {
+
+    // work * need - input * workAmount <= 0
+    // work / workAmoint <= input / need
+    for (size_t i = 0; i < distribution.size(); ++i) {
+        auto [p, type] = distribution[i];
         auto &bp = game.buildingProperties.at(type);
-        if (!bp.produceResource)
-            continue;
         for (auto [res, cnt] : bp.workResources) {
             vector<CalcType> coefs(var_cnt, 0);
-            for (auto [t, type] : distribution) {
-                if (!game.buildingProperties.at(type).workResources.contains(*bp.produceResource))
-                    continue;
-                for (auto spec : EnumValues<Specialty>::list) {
-                    coefs[ranges::lower_bound(trans_vars, TransVar{p, t, bp.produceResource, spec}) - trans_vars.begin()] = cnt;
-                }
-            }
+
+            for (auto index : static_vars_index)
+                coefs[index + i] = 1;
+            coefs[static_vars_index[(int) Specialty::PRODUCTION] + i] += CalcType(game.productionUpgrade) / 100;
+            for (auto index : static_vars_index)
+                coefs[index + i] *= cnt;
+
             for (auto [f, ft] : distribution) {
                 auto &bp = game.buildingProperties.at(ft);
                 if (bp.produceResource == res) {
                     for (auto spec : EnumValues<Specialty>::list) {
-                        coefs[ranges::lower_bound(trans_vars, TransVar{f, p, bp.produceResource, spec}) - trans_vars.begin()] = -1;
+                        auto index = ranges::lower_bound(trans_vars, TransVar{f, p, bp.produceResource, spec}) - trans_vars.begin();
+                        coefs[trans_vars_index + index] = -bp.workAmount;
                     }
                 }
             }
             solver.addLeConstraint(move(coefs), 0);
         }
     }
-    for (auto [p, type] : distribution) {
-        if (type == BuildingType::REPLICATOR) {
-            for (auto [res, cnt] : game.buildingProperties.at(BuildingType::REPLICATOR).workResources) {
-                vector<CalcType> coefs(var_cnt, 0);
-                for (auto [f, ft] : distribution) {
-                    auto &bp = game.buildingProperties.at(ft);
-                    if (bp.produceResource == res) {
-                        for (auto spec : EnumValues<Specialty>::list) {
-                            coefs[ranges::lower_bound(trans_vars, TransVar{f, p, bp.produceResource, spec}) - trans_vars.begin()] = -1;
-                        }
-                    }
-                }
-                coefs[trans_vars.size()] = cnt;
-                solver.addLeConstraint(move(coefs), 0);
-            }
-        }
-    }
+
+    // transfers * dist + static_robots <= robots
     for (auto spec : EnumValues<Specialty>::list) {
         vector<CalcType> limit_coefs(var_cnt, 0);
         for (auto [f, ftype] : distribution) {
