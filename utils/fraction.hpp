@@ -76,6 +76,32 @@ struct Fraction {
         num /= g;
         denom /= g;
     }
+
+    void round_to_denom(Int new_denom) {
+        bool sign = (num < 0);
+        if (sign)
+            num = -num;
+        Fraction l, r;
+        l.num = 0;
+        l.denom = 1;
+        r.num = 1;
+        r.denom = 0;
+        Fraction m;
+        while (l.denom + r.denom <= new_denom) {
+            m.num = l.num + r.num;
+            m.denom = l.denom + r.denom;
+            if (m < *this) {
+                l = m;
+            } else {
+                r = m;
+            }
+        }
+        num = m.num;
+        denom = m.denom;
+        if (sign)
+            num = -num;
+    }
+
     Fraction &operator+=(const Fraction &other) {
         Int new_denom = std::lcm(denom, other.denom);
         num *= new_denom / denom;

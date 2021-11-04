@@ -552,14 +552,15 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             }
 
             #warning "Only for testing, it does not work correctly"
-            auto scheme = getTransfersByDistribution<Fraction<long long>>(distribution, {robots, robots, robots});
+            auto scheme = getTransfersByDistribution<double>(distribution, {robots, robots, robots}, 0.001);
             auto &prod = scheme.prod;
             auto &new_transfers = scheme.transfers;
 
             cerr << prod << "\n";
 
             for (size_t i = 0; i < new_transfers.size(); ++i) {
-                auto [from, to, count, res] = new_transfers[i];
+                auto &[from, to, count, res] = new_transfers[i];
+                count.round_to_denom(constants::max_valid_flow_denom);
                 auto spec = scheme.specialty[i];
                 cerr << from << "\t" << to << "\t" << count << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7);
                 cerr << "\t" << to_string(spec).substr(0, 7) << "\n";
@@ -911,11 +912,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
         while (1) {
             for (size_t i = 0; i < transfers.size(); ++i) {
-                while (flow[i].denom > constants::max_valid_flow_denom) {
-                    flow[i].num /= 2;
-                    flow[i].denom /= 2;
-                    flow[i].normalize();
-                }
+                flow[i].round_to_denom(constants::max_valid_flow_denom);
             }
             co_await dispatcher.wait(1, constants::flow_stabilization_prior);
         }
