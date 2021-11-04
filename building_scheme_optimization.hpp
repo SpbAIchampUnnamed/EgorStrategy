@@ -139,8 +139,8 @@ ProductionScheme<CalcType> getTransfersByDistribution(
         solver.addLeConstraint(move(coefs), 0);
     }
 
-    // work * need - input * workAmount <= 0
-    // work / workAmoint <= input / need
+    // work * resource_per_product_need - input * workAmount <= 0
+    // work / workAmoint <= input / resource_per_product_need
     for (size_t i = 0; i < distribution.size(); ++i) {
         auto [p, type] = distribution[i];
         auto &bp = game.buildingProperties.at(type);
@@ -154,10 +154,10 @@ ProductionScheme<CalcType> getTransfersByDistribution(
                 coefs[index + i] *= cnt;
 
             for (auto [f, ft] : distribution) {
-                auto &bp = game.buildingProperties.at(ft);
-                if (bp.produceResource == res) {
+                auto &fbp = game.buildingProperties.at(ft);
+                if (fbp.produceResource == res) {
                     for (auto spec : EnumValues<Specialty>::list) {
-                        auto index = ranges::lower_bound(trans_vars, TransVar{f, p, bp.produceResource, spec}) - trans_vars.begin();
+                        auto index = ranges::lower_bound(trans_vars, TransVar{f, p, fbp.produceResource, spec}) - trans_vars.begin();
                         coefs[trans_vars_index + index] = -bp.workAmount;
                     }
                 }
@@ -190,6 +190,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
                 if (spec == Specialty::PRODUCTION) {
                     target_coefs[static_vars_index[(int) spec] + i] += CalcType(game.productionUpgrade) / 100;
                 }
+                target_coefs[static_vars_index[(int) spec] + i] /= game.buildingProperties.at(BuildingType::REPLICATOR).workAmount;
             }
         }
     }
