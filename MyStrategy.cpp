@@ -1,4 +1,5 @@
 #include "MyStrategy.hpp"
+#include "my_specialty.hpp"
 #include "graph.hpp"
 #include "precalc.hpp"
 #include "action_controller.hpp"
