@@ -575,6 +575,10 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 x.count.round_to_denom(constants::max_valid_flow_denom);
             }
 
+            for (auto [from, to, cnt, res] : new_transfers) {
+                cerr << from << "\t" << to << "\t" << cnt << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7) << "\n";
+            }
+
             // cerr << prod << "\n";
 
             // for (size_t i = 0; i < new_transfers.size(); ++i) {

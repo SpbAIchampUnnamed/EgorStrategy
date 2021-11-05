@@ -99,44 +99,38 @@ ProductionScheme<CalcType> getTransfersByDistribution(
     }
 
     // robots_in = robots_out
-    for (auto [p, type] : distribution) {
-        auto &bp = game.buildingProperties.at(type);
-        vector<CalcType> coefs(var_cnt, 0);
-        if (balance[(int) type] > 0) {
-            for (auto [t, type] : distribution) {
-                if (balance[(int) type] < 0) {
-                    for (auto spec : EnumValues<Specialty>::list) {
+    for (auto spec : EnumValues<Specialty>::list) {
+        for (auto [p, type] : distribution) {
+            auto &bp = game.buildingProperties.at(type);
+            vector<CalcType> coefs(var_cnt, 0);
+            if (balance[(int) type] > 0) {
+                for (auto [t, type] : distribution) {
+                    if (balance[(int) type] < 0) {
                         coefs[ranges::lower_bound(trans_vars, TransVar{p, t, nullopt, spec}) - trans_vars.begin()] = 1;
-                    }   
+                    }
                 }
             }
-        }
-        if (bp.produceResource) {
-            for (auto [t, type] : distribution) {
-                if (!game.buildingProperties.at(type).workResources.contains(*bp.produceResource))
-                    continue;
-                for (auto spec : EnumValues<Specialty>::list) {
+            if (bp.produceResource) {
+                for (auto [t, type] : distribution) {
+                    if (!game.buildingProperties.at(type).workResources.contains(*bp.produceResource))
+                        continue;
                     coefs[ranges::lower_bound(trans_vars, TransVar{p, t, bp.produceResource, spec}) - trans_vars.begin()] = 1;
                 }
             }
-        }
-        for (auto [f, ft] : distribution) {
-            auto &bp = game.buildingProperties.at(ft);
-            if (bp.produceResource && game.buildingProperties.at(type).workResources.contains(*bp.produceResource)) {
-                for (auto spec : EnumValues<Specialty>::list) {
+            for (auto [f, ft] : distribution) {
+                auto &bp = game.buildingProperties.at(ft);
+                if (bp.produceResource && game.buildingProperties.at(type).workResources.contains(*bp.produceResource)) {
                     coefs[ranges::lower_bound(trans_vars, TransVar{f, p, bp.produceResource, spec}) - trans_vars.begin()] = -1;
                 }
-            }
-            if (balance[(int) type] < 0 && balance[(int) ft] > 0) {
-                for (auto spec : EnumValues<Specialty>::list) {
+                if (balance[(int) type] < 0 && balance[(int) ft] > 0) {
                     coefs[ranges::lower_bound(trans_vars, TransVar{f, p, nullopt, spec}) - trans_vars.begin()] = -1;
                 }
             }
+            solver.addLeConstraint(coefs, 0);
+            for (auto &x : coefs)
+                x = -x;
+            solver.addLeConstraint(move(coefs), 0);
         }
-        solver.addLeConstraint(coefs, 0);
-        for (auto &x : coefs)
-            x = -x;
-        solver.addLeConstraint(move(coefs), 0);
     }
 
     // work * resource_per_product_need - input * workAmount <= 0
