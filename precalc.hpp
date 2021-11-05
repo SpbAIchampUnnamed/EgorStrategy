@@ -9,6 +9,7 @@
 
 namespace precalc {
 
+extern model::Specialty my_specialty;
 extern std::vector<std::vector<int>> near_planets;
 extern std::vector <std::vector<int>> real_distance_logist;
 extern Graph<> regular_planets_graph;
@@ -31,7 +32,7 @@ void calcDistances(auto &planets_graph, auto &d, auto &prev, F &&dist) {
     }
 }
 
-void prepare(model::Specialty = model::Specialty::COMBAT);
+void prepare();
 
 inline int real_distance(int x, int y) {
     return d[x][y] >> constants::planet_bits;

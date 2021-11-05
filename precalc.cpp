@@ -9,6 +9,7 @@ using namespace model;
 
 namespace precalc {
 
+    model::Specialty my_specialty;
     Graph<> regular_planets_graph;
     Graph<> logist_planets_graph;
     std::vector <std::vector<int>> regular_prev;
@@ -19,7 +20,12 @@ namespace precalc {
     std::ranges::subrange< decltype(regular_prev)::iterator> prev;
     std::vector <std::vector<int>> near_planets;
 
-    void prepare(model::Specialty s) {
+    void prepare() {
+        for (size_t i = 0; i < 3; ++i) {
+            if (game.planets[i].workerGroups.size() && game.planets[i].workerGroups[0].playerIndex == game.myIndex) {
+                my_specialty = (Specialty) i;
+            }
+        }
         regular_planets_graph = Graph(game.planets.size());
         logist_planets_graph = Graph(game.planets.size());
         for (auto &x: game.planets) {
@@ -45,7 +51,7 @@ namespace precalc {
             return pair(b, planets_dist(game.planets[a], game.planets[b]) << constants::planet_bits | 1);
         });
 
-        if (s == Specialty::LOGISTICS) {
+        if (my_specialty == Specialty::LOGISTICS) {
             d = decltype(d)(logist_d.begin(), logist_d.end());
             prev = decltype(prev)(logist_prev.begin(), logist_prev.end());
         } else {
