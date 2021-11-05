@@ -258,6 +258,8 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 Task<void> main_coro(Dispatcher &dispatcher) {
     ActionController controller(dispatcher);
 
+    co_await dispatcher.doAndWait(Action({}, {}, constants::my_specialty), 0, numeric_limits<int>::max());
+
     // auto start_time = clock();
 
     auto [cost, best_mul, distribution, _] = getInitialScheme();
@@ -522,64 +524,80 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         while (1) {
             // check rush
 
-            int sum = 0;
-            for (auto &g : game.flyingWorkerGroups) {
-                if (g.playerIndex != game.myIndex) {
-                    if (g.resource)
-                        sum -= g.number;
-                    else
-                        sum += g.number;
-                }
-            }
+            // int sum = 0;
+            // for (auto &g : game.flyingWorkerGroups) {
+            //     if (g.playerIndex != game.myIndex) {
+            //         if (g.resource)
+            //             sum -= g.number;
+            //         else
+            //             sum += g.number;
+            //     }
+            // }
 
-            if (sum >= 600) {
-                harvest_coro(dispatcher, start_planet).start();
-                co_return;
-            }
+            // if (sum >= 600) {
+            //     harvest_coro(dispatcher, start_planet).start();
+            //     co_return;
+            // }
 
             // recalc transfers
 
-            int robots = getMyRobotsCount();
+            array<int, EnumValues<Specialty>::list.size()> robots{};
 
-            for (auto &g : game.flyingWorkerGroups) {
-                if (g.playerIndex != game.myIndex) {
-                    auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
-                        return x.first == p;
-                    });
-                    if (it != distribution.end()) {
-                        robots -= g.number;
-                    }
+            ranges::fill(robots, getMyRobotsCount());
+
+            for (size_t i = 0; i < game.players.size(); ++i) {
+                auto &p = game.players[i];
+                if (p.teamIndex == game.players[game.myIndex].teamIndex && p.specialty) {
+                    robots[(int) *p.specialty] = getPlayersRobotsCount(i);
                 }
             }
 
-            #warning "Only for testing, it does not work correctly"
-            auto scheme = getTransfersByDistribution<double>(distribution, {robots, robots, robots}, 0.001);
+            // Use combat robots for interception
+            // for (auto &g : game.flyingWorkerGroups) {
+            //     if (g.playerIndex != game.myIndex) {
+            //         auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
+            //             return x.first == p;
+            //         });
+            //         if (it != distribution.end()) {
+            //             robots -= g.number;
+            //         }
+            //     }
+            // }
+
+            auto scheme = getTransfersByDistribution<double>(distribution, robots, 0.001);
             auto &prod = scheme.prod;
-            auto &new_transfers = scheme.transfers;
+            auto new_transfers = views::iota((size_t) 0, scheme.transfers.size()) | views::filter([&](size_t i) {
+                return scheme.specialty[i] == constants::my_specialty;
+            }) | views::transform([&](size_t i) -> auto& {
+                return scheme.transfers[i];
+            });
 
-            cerr << prod << "\n";
-
-            for (size_t i = 0; i < new_transfers.size(); ++i) {
-                auto &[from, to, count, res] = new_transfers[i];
-                count.round_to_denom(constants::max_valid_flow_denom);
-                auto spec = scheme.specialty[i];
-                cerr << from << "\t" << to << "\t" << count << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7);
-                cerr << "\t" << to_string(spec).substr(0, 7) << "\n";
+            for (auto &x : scheme.transfers) {
+                x.count.round_to_denom(constants::max_valid_flow_denom);
             }
 
-            cerr << "\n";
+            // cerr << prod << "\n";
 
-            for (size_t i = 0; i < distribution.size(); ++i) {
-                auto [p, type] = distribution[i];
-                for (auto spec : EnumValues<Specialty>::list) {
-                    if (scheme.static_robots[i][(int) spec] > 0) {
-                        cerr << scheme.static_robots[i][(int) spec] << "\trobots of " << to_string(spec).substr(0, 7) << "\ton ";
-                        cerr << p << "\t" << to_string(type) << "\n";
-                    }
-                }
-            }
+            // for (size_t i = 0; i < new_transfers.size(); ++i) {
+            //     auto &[from, to, count, res] = new_transfers[i];
+            //     auto spec = scheme.specialty[i];
+            //     cerr << from << "\t" << to << "\t" << count << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7);
+            //     cerr << "\t" << to_string(spec).substr(0, 7) << "\n";
+            // }
 
-            terminate();
+            // cerr << "\n";
+
+            // for (size_t i = 0; i < distribution.size(); ++i) {
+            //     auto [p, type] = distribution[i];
+            //     for (auto spec : EnumValues<Specialty>::list) {
+            //         if (scheme.static_robots[i][(int) spec] > 0) {
+            //             cerr << scheme.static_robots[i][(int) spec] << "\trobots of " << to_string(spec).substr(0, 7) << "\ton ";
+            //             cerr << p << "\t" << to_string(type) << "\n";
+            //         }
+            //     }
+            // }
+
+            // terminate();
 
             auto cmp = [&](int x, int y) {
                 auto &xt = transfers[x];
@@ -622,15 +640,12 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             // recalc static_robots
 
             ranges::fill(pre_static_robots, 0);
-            for (auto [from, to, count, res] : transfers) {
-                if (!res)
-                    continue;
-                auto it = ranges::find_if(distribution, [from](auto &x) {
-                    return x.first == from;
-                });
-                auto &bp = game.buildingProperties.at(it->second);
-                pre_static_robots[from] += count * bp.workAmount / bp.produceAmount;
+
+            for (size_t i = 0; i < distribution.size(); ++i) {
+                auto p = distribution[i].first;
+                pre_static_robots[p] = scheme.static_robots[i][(int) constants::my_specialty];
             }
+
             for (auto [p, type] : distribution) {
                 auto &bp = game.buildingProperties.at(type);
                 if (bp.produceResource) {
@@ -639,8 +654,6 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     if (pre_static_robots[p] < 0) {
                         pre_static_robots[p] = 0;
                     }
-                } else {
-                    pre_static_robots[p] = prod * bp.workAmount;
                 }
             }
             ranges::transform(pre_static_robots, static_robots.begin(), [](auto &x) { return ceil(x); });
@@ -983,7 +996,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
 void MyStrategy::play(Runner &runner)
 {
-    precalc::prepare();
+    precalc::prepare(constants::my_specialty);
 
     TaskQueue queue;
     Action act;
