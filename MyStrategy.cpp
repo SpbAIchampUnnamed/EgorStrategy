@@ -1,5 +1,4 @@
 #include "MyStrategy.hpp"
-#include "my_specialty.hpp"
 #include "graph.hpp"
 #include "precalc.hpp"
 #include "action_controller.hpp"
@@ -258,7 +257,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 Task<void> main_coro(Dispatcher &dispatcher) {
     ActionController controller(dispatcher);
 
-    co_await dispatcher.doAndWait(Action({}, {}, constants::my_specialty), 0, numeric_limits<int>::max());
+    co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
 
     // auto start_time = clock();
 
@@ -567,7 +566,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             auto scheme = getTransfersByDistribution<double>(distribution, robots, 0.001);
             auto &prod = scheme.prod;
             auto new_transfers = views::iota((size_t) 0, scheme.transfers.size()) | views::filter([&](size_t i) {
-                return scheme.specialty[i] == constants::my_specialty;
+                return scheme.specialty[i] == precalc::my_specialty;
             }) | views::transform([&](size_t i) -> auto& {
                 return scheme.transfers[i];
             });
@@ -635,6 +634,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 return precalc::real_distance(t.from, t.to);
             }), 0), game.maxFlyingWorkerGroups));
 
+            batching_factor = max(1, batching_factor);
+
             cerr << "batching_factor = " << batching_factor << "\n";
 
             // recalc static_robots
@@ -643,7 +644,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
             for (size_t i = 0; i < distribution.size(); ++i) {
                 auto p = distribution[i].first;
-                pre_static_robots[p] = scheme.static_robots[i][(int) constants::my_specialty];
+                pre_static_robots[p] = scheme.static_robots[i][(int) precalc::my_specialty];
             }
 
             for (auto [p, type] : distribution) {
@@ -684,7 +685,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             }
 
             // REWRITE THIS SHIT!!!
-            if (full.size()) {
+            if (full.size() && 0) {
                 auto planets = game.planets;
                 for (auto [p, type] : distribution)
                     planets[p].id = -1;
@@ -947,16 +948,20 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     g.addEdge(from, t, 0, ceil(precalc::real_distance(from, to) * (cnt - flow[i])));
                 }
             }
+            for (size_t i = 0; i < game.planets.size(); ++i) {
+                int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i];
+                if (balance > 0) {
+                    // cerr << balance << " free robots on planet " << i << " in tick " << game.currentTick << "\n";
+                    g.addEdge(s, i, 0, balance);
+                    inputs.emplace_back(i);
+                } else {
+                    outputs.emplace_back(i);
+                    g.addEdge(i, t, 0, -balance);
+                }
+            }
             ranges::sort(outputs);
             auto to_remove = ranges::unique(outputs);
             outputs.erase(to_remove.begin(), to_remove.end());
-            for (size_t i = 0; i < game.planets.size(); ++i) {
-                if (int free = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i]; free > 0)
-                {
-                    g.addEdge(s, i, 0, free);
-                    inputs.emplace_back(i);
-                }
-            }
             for (auto i : inputs) {
                 for (auto o : outputs) {
                     g.addEdge(i, o, precalc::d[i][o]);
@@ -996,7 +1001,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
 void MyStrategy::play(Runner &runner)
 {
-    precalc::prepare(constants::my_specialty);
+    precalc::prepare();
 
     TaskQueue queue;
     Action act;
