@@ -82,3 +82,14 @@ int getPlayersRobotsCount(int player) {
 int getMyRobotsCount() {
     return getPlayersRobotsCount(game.myIndex);
 }
+
+int getMyTeamRobotsCount() {
+    int ans = 0;
+    for (size_t i = 0; i < game.players.size(); ++i) {
+        auto &p = game.players[i];
+        if (p.teamIndex == game.players[game.myIndex].teamIndex) {
+            ans += getPlayersRobotsCount(i);
+        }
+    }
+    return ans;
+}

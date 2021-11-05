@@ -10,6 +10,7 @@ std::unordered_map<model::BuildingType, Fraction<int>> getRobotCounts(model::Bui
 
 int getPlayersRobotsCount(int player);
 int getMyRobotsCount();
+int getMyTeamRobotsCount();
 int getPlayersRobotsOnPlanet(int player, int planet);
 int getMyRobotsOnPlanet(int planet);
 
