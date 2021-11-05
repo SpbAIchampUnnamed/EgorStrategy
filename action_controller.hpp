@@ -51,7 +51,7 @@ struct ActionController {
             if (res)
                 reservedResources[i][(int) *res] -= count;
             int retrys = 0;
-            while (!co_await dispatcher.doAndWait(model::Action(move, {}), precalc::d[next][i] / model::game.planets.size(), constants::move_reserve_prior)) {
+            while (!co_await dispatcher.doAndWait(model::Action(move, {}), precalc::real_distance(next, i), constants::move_reserve_prior)) {
                 reservedRobots[i] += count;
                 if (res)
                     reservedResources[i][(int) *res] += count;
