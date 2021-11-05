@@ -4,6 +4,7 @@
 #include "precalc.hpp"
 #include "simplex.hpp"
 #include "mincost.hpp"
+#include "utils/reduce.hpp"
 #include "assert.hpp"
 #include <iostream>
 #include <ranges>
@@ -15,7 +16,7 @@ BuildingScheme getInitialScheme() {
     auto start_planet = ranges::find_if(game.planets, [](auto &p) {
         return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
     })->id;
-    int my_robots = getMyRobotsCount();
+    int my_robots = getMyTeamRobotsCount();
     cerr << my_robots << "\n";
     auto cnts = getRobotCounts(BuildingType::REPLICATOR);
     int mul_max = ceil(
@@ -331,7 +332,6 @@ BuildingScheme getInitialScheme() {
 }
 
 BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
-    return building_scheme;
     BuildingScheme new_building_scheme = building_scheme;
     double best_value = estimateBuildingScheme(new_building_scheme);
     vector <optional<BuildingType>> planet_building(game.planets.size(), nullopt);
@@ -339,7 +339,7 @@ BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
         planet_building[planet_index] = building;
     }
     for (auto loop = 0; loop < 10; loop++) {
-        for (auto &[planet_index, building]: building_scheme.distribution) {
+        for (auto distribution = building_scheme.distribution; auto &[planet_index, building] : distribution) {
             if (building == BuildingType::MINES ||
                 building == BuildingType::CAREER ||
                 building == BuildingType::QUARRY ||
