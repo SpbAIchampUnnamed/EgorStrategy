@@ -76,7 +76,7 @@ namespace stringable_enum { \
         for (uint16_t i = 0; i < opts.count; ++i) { \
             auto [l, r, v] = opts.segs[i]; \
             if (e == static_cast<decltype(e)>(v)) \
-                return std::string_view(opts.data.begin() + l, r - l); \
+                return std::string_view(opts.data.data() + l, r - l); \
         } \
         return ""; \
     } \
