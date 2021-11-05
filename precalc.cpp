@@ -52,7 +52,6 @@ namespace precalc {
             d = decltype(d)(regular_d.begin(), regular_d.end());
             prev = decltype(prev)(regular_prev.begin(), regular_prev.end());
         }
-
         near_planets.resize(game.planets.size());
         for (size_t i = 0; i < game.planets.size(); i++) {
             near_planets[i].resize(game.planets.size());

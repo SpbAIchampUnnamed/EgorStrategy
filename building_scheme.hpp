@@ -14,6 +14,7 @@ struct Transfer {
     int from, to;
     Fraction<long long> count;
     std::optional<model::Resource> res = std::nullopt;
+
 };
 
 struct BuildingScheme {
@@ -25,8 +26,10 @@ struct BuildingScheme {
 
 BuildingScheme getInitialScheme();
 
-double estimateBuildingScheme(BuildingScheme &buildingScheme);
+double estimateBuildingScheme(BuildingScheme &building_scheme);
 
-void improveBuildingScheme(BuildingScheme &buildingScheme);
+BuildingScheme improveBuildingScheme(BuildingScheme &building_Scheme);
+
+int calculateBuildingSchemeCost(BuildingScheme &building_scheme);
 
 #endif

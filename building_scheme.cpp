@@ -18,8 +18,9 @@ BuildingScheme getInitialScheme() {
     int my_robots = getMyRobotsCount();
     cerr << my_robots << "\n";
     auto cnts = getRobotCounts(BuildingType::REPLICATOR);
-    int mul_max = ceil(game.buildingProperties.at(BuildingType::REPLICATOR).maxWorkers / cnts[BuildingType::REPLICATOR]);
-    for (int mul = 2; mul >= 1; --mul) {
+    int mul_max = ceil(
+            game.buildingProperties.at(BuildingType::REPLICATOR).maxWorkers / cnts[BuildingType::REPLICATOR]);
+    for (int mul = 5; mul >= 1; --mul) {
         cerr << "MUL = " << mul << "\n";
         int robots = 0;
         vector<BuildingType> buildings;
@@ -56,7 +57,7 @@ BuildingScheme getInitialScheme() {
             {
                 for (auto [vertex_from, planet_from] : from_mapping) {
                     for (auto [vertex_to, planet_to] : to_mapping) {
-                        g.addEdge(vertex_from, vertex_to, precalc::real_distance(planet_from, planet_to));
+                        g.addEdge(vertex_from, vertex_to, precalc::d[planet_from][planet_to] / game.planets.size());
                     }
                 }
                 ranges::sort(to_mapping);
@@ -280,7 +281,7 @@ BuildingScheme getInitialScheme() {
             vector<CalcType> target_coefs(var_cnt, 0);
             for (auto [f, ftype] : distribution) {
                 for (auto [t, ttype] : distribution) {
-                    int d = precalc::real_distance(f, t);
+                    int d = precalc::d[f][t] / game.planets.size();
                     if (balance[(int) ftype] > 0 && balance[(int) ttype] < 0)
                         target_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, nullopt}) - trans_vars.begin()] = d;
                     auto res = game.buildingProperties.at(ftype).produceResource;
@@ -295,7 +296,7 @@ BuildingScheme getInitialScheme() {
                 if (t[i] > 0) {
                     auto [from, to, res] = trans_vars[i];
                     transfers.emplace_back(from, to, round(t[i]), res);
-                    scheme.cost += precalc::real_distance(from, to) * round(t[i]);
+                    scheme.cost += precalc::d[from][to] / game.planets.size() * round(t[i]);
                 }
             }
             if (scheme.cost < best_scheme.cost) {
@@ -319,10 +320,88 @@ BuildingScheme getInitialScheme() {
             }
         }
         cerr << "total_robots = " << robots << " + " << best_scheme.cost << " = " << robots + best_scheme.cost << "\n";
-        if (robots + best_scheme.cost <= my_robots) {   
+        if (robots + best_scheme.cost <= my_robots) {
+            best_scheme = improveBuildingScheme(best_scheme);
+            cerr << "new_total_robots = " << robots << " + " << best_scheme.cost << " = " << robots + best_scheme.cost << "\n";
             return best_scheme;
         }
     }
     cerr << "CAN NOT BUILD RELAIBLE SCHEME\n";
     terminate();
+}
+
+BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
+    BuildingScheme new_building_scheme = building_scheme;
+    double best_value = estimateBuildingScheme(new_building_scheme);
+    vector <optional<BuildingType>> planet_building(game.planets.size(), nullopt);
+    for (auto &[planet_index, building]: new_building_scheme.distribution) {
+        planet_building[planet_index] = building;
+    }
+    for (auto loop = 0; loop < 10; loop++) {
+        for (auto &[planet_index, building]: building_scheme.distribution) {
+            if (building == BuildingType::MINES ||
+                building == BuildingType::CAREER ||
+                building == BuildingType::QUARRY ||
+                building == BuildingType::FARM) {
+                continue;
+            }
+            for (auto new_planet_index_find = 0; new_planet_index_find < 30; new_planet_index_find++) {
+                int new_planet_index = precalc::near_planets[planet_index][new_planet_index_find];
+                if (planet_building[new_planet_index] == BuildingType::MINES ||
+                    planet_building[new_planet_index] == BuildingType::CAREER ||
+                    planet_building[new_planet_index] == BuildingType::FARM ||
+                    planet_building[new_planet_index] == BuildingType::QUARRY) {
+                    continue;
+                }
+                for (Transfer &transfer: new_building_scheme.transfers) {
+                    if (transfer.to == planet_index) transfer.to = new_planet_index;
+                    else if (transfer.from == planet_index) transfer.from = new_planet_index;
+                    else if (transfer.to == new_planet_index) transfer.to = planet_index;
+                    else if (transfer.from == new_planet_index) transfer.from = planet_index;
+                }
+                auto old_planet_building = planet_building[new_planet_index];
+                planet_building[new_planet_index] = planet_building[planet_index];
+                planet_building[planet_index] = old_planet_building;
+                double value = estimateBuildingScheme(new_building_scheme);
+                if (value < best_value) {
+                    building_scheme = new_building_scheme;
+                    building_scheme.cost = calculateBuildingSchemeCost(building_scheme);
+                    best_value = value;
+                }
+            }
+
+        }
+    }
+    return building_scheme;
+}
+
+double estimateBuildingScheme(BuildingScheme &building_scheme) {
+    double value = 0;
+    for (Transfer &transfer: building_scheme.transfers) {
+        value += (1.0 / 3) * precalc::regular_real_distance(transfer.from, transfer.to) * transfer.count.num;
+        value += (2.0 / 3) * precalc::logist_real_distance(transfer.from, transfer.to) * transfer.count.num;
+    }
+    for (auto &p1: building_scheme.distribution) {
+        for (auto &p2: building_scheme.distribution) {
+            value += (1.0 / 15) * precalc::real_distance(p1.first, p2.first);
+        }
+    }
+    int maxDistFrom0 = 100, maxDistFrom1 = 100, maxDistFrom2 = 100;
+    for (auto &p: building_scheme.distribution) {
+        maxDistFrom0 = max(maxDistFrom0, precalc::real_distance(0, p.first));
+        maxDistFrom1 = max(maxDistFrom1, precalc::real_distance(1, p.first));
+        maxDistFrom2 = max(maxDistFrom2, precalc::real_distance(2, p.first));
+    }
+    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom0;
+    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom1;
+    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom2;
+    return value;
+}
+
+int calculateBuildingSchemeCost(BuildingScheme &building_scheme) {
+    int cost = 0;
+    for (auto &[from, to, count, res] : building_scheme.transfers) {
+        cost += count.num * precalc::regular_real_distance(from, to);
+    }
+    return cost;
 }
