@@ -677,16 +677,16 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 }
             }
             
-            for (auto &g : game.flyingWorkerGroups) {
-                if (g.playerIndex != game.myIndex) {
-                    auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
-                        return x.first == p;
-                    });
-                    if (it != distribution.end()) {
-                        static_robots[g.targetPlanet] += g.number;
-                    }
-                }
-            }
+            // for (auto &g : game.flyingWorkerGroups) {
+            //     if (g.playerIndex != game.myIndex) {
+            //         auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
+            //             return x.first == p;
+            //         });
+            //         if (it != distribution.end()) {
+            //             static_robots[g.targetPlanet] += g.number;
+            //         }
+            //     }
+            // }
 
             // REWRITE THIS SHIT!!!
             if (full.size() && 0) {
@@ -799,6 +799,13 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
         while (1) {
             co_await dispatcher.wait(1, constants::cycle_main_prior - 1);
+            for (size_t i = 0; i < transfers.size(); ++i) {
+                if (transfers[i].count > 0)
+                    cerr << flow[i] / transfers[i].count << " ";
+                else
+                    cerr << "0/0 ";
+            }
+            cerr << "\n";
             cerr << starts << " groups starts\n";
             starts = 0;
         }
@@ -924,7 +931,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     cerr << "need\t" << cnt - flow[i] << "\ton\t" << from << " - " << to << " in tick " << game.currentTick << "\n";
                 }
             }
-            co_await dispatcher.wait(batching_factor, constants::cycle_capture_prior);
+            // co_await dispatcher.wait(batching_factor, constants::cycle_capture_prior);
+            co_await dispatcher.wait(1, constants::cycle_capture_prior);
         }
     }).start();
 
@@ -953,16 +961,18 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 }
             }
             for (size_t i = 0; i < game.planets.size(); ++i) {
-                int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i];
+                int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i] + controller.onWayTo[i];
                 if (balance > 0) {
                     // cerr << balance << " free robots on planet " << i << " in tick " << game.currentTick << "\n";
-                    g.addEdge(s, i, 0, balance);
+                    if (balance > controller.onWayTo[i])
+                        g.addEdge(s, i, 0, balance - controller.onWayTo[i]);
                     inputs.emplace_back(i);
-                } else {
+                } else if (balance < 0) {
                     outputs.emplace_back(i);
                     g.addEdge(i, t, 0, -balance);
                 }
             }
+
             ranges::sort(outputs);
             auto to_remove = ranges::unique(outputs);
             outputs.erase(to_remove.begin(), to_remove.end());
@@ -971,6 +981,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     g.addEdge(i, o, precalc::d[i][o]);
                 }
             }
+
             flows::mincost(g, s, t);
             for (auto i : inputs) {
                 for (auto x : g.edges[i]) {

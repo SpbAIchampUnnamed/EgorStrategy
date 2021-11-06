@@ -20,13 +20,14 @@ struct ProductionScheme {
 
 template<class CalcType>
 ProductionScheme<CalcType> getTransfersByDistribution(
-    const std::vector<std::pair<int, model::BuildingType>> &distribution,
+    std::vector<std::pair<int, model::BuildingType>> distribution,
     std::array<int, model::EnumValues<model::Specialty>::list.size()> robots_limits,
     CalcType eps = 0)
 {
     using namespace std;
     using namespace model;
     using TransVar = tuple<int, int, optional<Resource>, Specialty>;
+    ranges::sort(distribution);
     array<int, EnumValues<BuildingType>::list.size()> balance{};
     for (auto type : EnumValues<BuildingType>::list) {
         if (!game.buildingProperties.contains(type))
@@ -168,6 +169,10 @@ ProductionScheme<CalcType> getTransfersByDistribution(
                 int d = (spec == Specialty::LOGISTICS ? precalc::logist_real_distance(f, t) : precalc::regular_real_distance(f, t));
                 if (balance[(int) ftype] > 0 && balance[(int) ttype] < 0)
                     limit_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, nullopt, spec}) - trans_vars.begin()] = d;
+                auto res = game.buildingProperties.at(ftype).produceResource;
+                if (res && game.buildingProperties.at(ttype).workResources.contains(*res)) {
+                    limit_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, res, spec}) - trans_vars.begin()] = d;
+                }
             }
         }
         for (size_t i = 0; i < distribution.size(); ++i) {
@@ -188,6 +193,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
             }
         }
     }
+
     auto [t, ans] = solver.template solve<simplex_method::SolutionType::maximize>(move(target_coefs), eps);
     ProductionScheme<CalcType> scheme;
     scheme.prod = ans;
