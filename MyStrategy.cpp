@@ -1,5 +1,4 @@
 #include "MyStrategy.hpp"
-#include "my_specialty.hpp"
 #include "graph.hpp"
 #include "precalc.hpp"
 #include "action_controller.hpp"
@@ -257,7 +256,6 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 
 Task<void> main_coro(Dispatcher &dispatcher) {
     ActionController controller(dispatcher);
-
     co_await dispatcher.doAndWait(Action({}, {}, constants::my_specialty), 0, numeric_limits<int>::max());
 
     // auto start_time = clock();
@@ -289,6 +287,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     auto start_planet = ranges::find_if(game.planets, [](auto &p) {
         return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
     })->id;
+
+
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
         auto &a_bp = game.buildingProperties.at(a.second);
@@ -378,7 +378,37 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start();
 
-    for (int prior = constants::building_task_initial_prior; auto [p, type] : distribution) {
+    vector<pair<int, BuildingType>> my_distribution(0);
+    {
+        int total_stone = 0;
+        vector<optional<BuildingType>> planned(game.planets.size(), nullopt);
+        vector<bool> used(game.planets.size());
+        for (auto [p, type] : distribution) {
+            planned[p] = type;
+            total_stone += game.buildingProperties.at(type).buildResources.at(Resource::STONE);
+        }
+        auto generate_custom_distribution = [&] (int speciality) {
+            int stone_used = 0;
+            for (int i = 0; i < game.planets.size(); ++i) {
+                if (planned_building[near_planets[speciality][i]] != nullopt && !used[near_planets[speciality][i]]) {
+                    int planet_index = near_planets[speciality][i];
+                    used[planet_index] = true;
+                    if (my_specialty == speciality) {
+                        my_distribution.emplace_back(pair<int, BuildingType>(planet_index, planned[planet_index].value));
+                    }
+                    stone_used += game.buildingProperties.at(planned[planet_index].value).buildResources.at(Resource::STONE);
+                    if (stone_used >= total_stone / 3 && speciality != 0) {
+                        break;
+                    }
+                }
+            }
+        };
+        for (int i = 2; i >= 0; i--) {
+            generate_custom_distribution(i);
+        }
+    }
+
+    for (int prior = constants::building_task_initial_prior; auto [p, type] : my_distribution) {
         tasks.emplace_back(make_coro([&, p, type, prior=prior--](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
             int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
             while (1) {
