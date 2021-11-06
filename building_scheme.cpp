@@ -14,7 +14,7 @@ using namespace model;
 
 BuildingScheme getInitialScheme() {
     auto start_planet = ranges::find_if(game.planets, [](auto &p) {
-        return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
+        return p.workerGroups.size() && game.players[p.workerGroups[0].playerIndex].teamIndex == game.players[game.myIndex].teamIndex;
     })->id;
     int my_robots = getMyTeamRobotsCount();
     cerr << my_robots << "\n";
@@ -58,7 +58,7 @@ BuildingScheme getInitialScheme() {
             {
                 for (auto [vertex_from, planet_from] : from_mapping) {
                     for (auto [vertex_to, planet_to] : to_mapping) {
-                        g.addEdge(vertex_from, vertex_to, precalc::real_distance(planet_from, planet_to));
+                        g.addEdge(vertex_from, vertex_to, precalc::logist_real_distance(planet_from, planet_to));
                     }
                 }
                 ranges::sort(to_mapping);
@@ -149,8 +149,8 @@ BuildingScheme getInitialScheme() {
             smul = mul;
             auto planets = game.planets;
             sort(planets.begin(), planets.end(), [i](auto &a, auto &b) {
-                if (precalc::d[i][a.id] != precalc::d[i][b.id])
-                    return precalc::d[i][a.id] < precalc::d[i][b.id];
+                if (precalc::logist_d[i][a.id] != precalc::logist_d[i][b.id])
+                    return precalc::logist_d[i][a.id] < precalc::logist_d[i][b.id];
                 else
                     return a.id < b.id;
             });
@@ -282,7 +282,7 @@ BuildingScheme getInitialScheme() {
             vector<CalcType> target_coefs(var_cnt, 0);
             for (auto [f, ftype] : distribution) {
                 for (auto [t, ttype] : distribution) {
-                    int d = precalc::real_distance(f, t);
+                    int d = precalc::logist_real_distance(f, t);
                     if (balance[(int) ftype] > 0 && balance[(int) ttype] < 0)
                         target_coefs[ranges::lower_bound(trans_vars, TransVar{f, t, nullopt}) - trans_vars.begin()] = d;
                     auto res = game.buildingProperties.at(ftype).produceResource;
@@ -297,7 +297,7 @@ BuildingScheme getInitialScheme() {
                 if (t[i] > 0) {
                     auto [from, to, res] = trans_vars[i];
                     transfers.emplace_back(from, to, round(t[i]), res);
-                    scheme.cost += precalc::real_distance(from, to) * round(t[i]);
+                    scheme.cost += precalc::logist_real_distance(from, to) * round(t[i]);
                 }
             }
             if (scheme.cost < best_scheme.cost) {
@@ -307,9 +307,9 @@ BuildingScheme getInitialScheme() {
         }
         int dist = 0, alt_dist = 0;
         for (auto [p, _] : best_scheme.distribution) {
-            dist += precalc::d[start_planet][p];
+            dist += precalc::logist_d[start_planet][p];
             p = game.planets.size() - 1 - p;
-            alt_dist += precalc::d[start_planet][p];
+            alt_dist += precalc::logist_d[start_planet][p];
         }
         if (alt_dist < dist) {
             for (auto &[p, _] : best_scheme.distribution) {
@@ -384,14 +384,14 @@ double estimateBuildingScheme(BuildingScheme &building_scheme) {
     }
     for (auto &p1: building_scheme.distribution) {
         for (auto &p2: building_scheme.distribution) {
-            value += (1.0 / 15) * precalc::real_distance(p1.first, p2.first);
+            value += (1.0 / 15) * precalc::regular_real_distance(p1.first, p2.first);
         }
     }
     int maxDistFrom0 = 100, maxDistFrom1 = 100, maxDistFrom2 = 100;
     for (auto &p: building_scheme.distribution) {
-        maxDistFrom0 = max(maxDistFrom0, precalc::real_distance(0, p.first));
-        maxDistFrom1 = max(maxDistFrom1, precalc::real_distance(1, p.first));
-        maxDistFrom2 = max(maxDistFrom2, precalc::real_distance(2, p.first));
+        maxDistFrom0 = max(maxDistFrom0, precalc::regular_real_distance(0, p.first));
+        maxDistFrom1 = max(maxDistFrom1, precalc::regular_real_distance(1, p.first));
+        maxDistFrom2 = max(maxDistFrom2, precalc::regular_real_distance(2, p.first));
     }
     value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom0;
     value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom1;

@@ -6,21 +6,27 @@
 #include <cmath>
 #include <limits>
 #include <concepts>
+#include <compare>
 
-template<std::integral Int = int>
+template<std::signed_integral Int = int>
 struct Fraction {
     Int num, denom;
     Fraction(Int num = 0, Int denom = 1): num(num), denom(denom) {
         normalize();
         normalize_sign();
     }
-    template<std::integral Int2>
+    template<std::signed_integral Int2>
     Fraction(Int2 num, Int2 denom = 1): num(num), denom(denom) {
         normalize();
         normalize_sign();
     }
-    template<std::integral Int2>
-    Fraction(const Fraction<Int2> &other): num(other.num), denom(other.denom) {}
+
+    template<std::signed_integral Int2>
+    explicit Fraction(const Fraction<Int2> &other) requires(sizeof(Int2) >= sizeof(Int)) : num(other.num), denom(other.denom) {}
+
+    template<std::signed_integral Int2>
+    Fraction(const Fraction<Int2> &other) requires(sizeof(Int2) < sizeof(Int)) : num(other.num), denom(other.denom) {}
+
     Fraction(double d) {
         union {
             double d;
@@ -65,6 +71,11 @@ struct Fraction {
             }
         }
     }
+
+    explicit operator double() const {
+        return (double) num / (double) denom;
+    }
+
     void normalize_sign() {
         if (denom < 0) {
             num = -num;
@@ -78,6 +89,9 @@ struct Fraction {
     }
 
     void round_to_denom(Int new_denom) {
+        if (denom <= new_denom) {
+            return;
+        }
         bool sign = (num < 0);
         if (sign)
             num = -num;
@@ -96,8 +110,13 @@ struct Fraction {
                 r = m;
             }
         }
-        num = m.num;
-        denom = m.denom;
+        if (*this < m) {
+            *this = l;
+        } else if (*this > m) {
+            *this = r;
+        } else {
+            *this = m;
+        }
         if (sign)
             num = -num;
     }
@@ -140,6 +159,31 @@ struct Fraction {
         }
         return *this;
     }
+    friend std::strong_ordering operator<=>(Fraction a, Fraction b) {
+        if ((a.num <=> 0) != (b.num <=> 0)) {
+            return a.num <=> b.num;
+        }
+        if (a.num < 0) {
+            a.num = -a.num;
+            b.num = -b.num;
+            std::swap(a, b);
+        }
+        while (1) {
+            if (a.num == b.num && a.denom == b.denom) {
+                return std::strong_ordering::equal;
+            } else if (a.num / a.denom != b.num / b.denom) {
+                return a.num / a.denom <=> b.num / b.denom;
+            } else {
+                a.num %= a.denom;
+                b.num %= b.denom;
+                if (a.num == 0 || b.num == 0) {
+                    return a.num <=> b.num;
+                }
+                std::swap(a.num, b.denom);
+                std::swap(a.denom, b.num);
+            }
+        }
+    }
     friend Fraction operator+(Fraction x, const Fraction &y) {
         x += y;
         return x;
@@ -155,13 +199,6 @@ struct Fraction {
     friend Fraction operator/(Fraction x, const Fraction &y) {
         x /= y;
         return x;
-    }
-    auto operator<=>(const Fraction &other) const {
-        if (num == 0 || other.num == 0)
-            return num <=> other.num;
-        Int gn = std::gcd(num, other.num);
-        Int gd = std::gcd(denom, other.denom);
-        return (num / gn) * (other.denom / gd) <=> (other.num / gn) * (denom / gd);
     }
     bool operator==(const Fraction &other) const {
         return num == other.num && denom == other.denom;

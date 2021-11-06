@@ -256,7 +256,8 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 
 Task<void> main_coro(Dispatcher &dispatcher) {
     ActionController controller(dispatcher);
-    co_await dispatcher.doAndWait(Action({}, {}, constants::my_specialty), 0, numeric_limits<int>::max());
+
+    co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
 
     // auto start_time = clock();
 
@@ -287,8 +288,6 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     auto start_planet = ranges::find_if(game.planets, [](auto &p) {
         return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
     })->id;
-
-
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
         auto &a_bp = game.buildingProperties.at(a.second);
@@ -378,37 +377,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start();
 
-    vector<pair<int, BuildingType>> my_distribution(0);
-    {
-        int total_stone = 0;
-        vector<optional<BuildingType>> planned(game.planets.size(), nullopt);
-        vector<bool> used(game.planets.size());
-        for (auto [p, type] : distribution) {
-            planned[p] = type;
-            total_stone += game.buildingProperties.at(type).buildResources.at(Resource::STONE);
-        }
-        auto generate_custom_distribution = [&] (int speciality) {
-            int stone_used = 0;
-            for (int i = 0; i < game.planets.size(); ++i) {
-                if (planned_building[near_planets[speciality][i]] != nullopt && !used[near_planets[speciality][i]]) {
-                    int planet_index = near_planets[speciality][i];
-                    used[planet_index] = true;
-                    if (my_specialty == speciality) {
-                        my_distribution.emplace_back(pair<int, BuildingType>(planet_index, planned[planet_index].value));
-                    }
-                    stone_used += game.buildingProperties.at(planned[planet_index].value).buildResources.at(Resource::STONE);
-                    if (stone_used >= total_stone / 3 && speciality != 0) {
-                        break;
-                    }
-                }
-            }
-        };
-        for (int i = 2; i >= 0; i--) {
-            generate_custom_distribution(i);
-        }
-    }
-
-    for (int prior = constants::building_task_initial_prior; auto [p, type] : my_distribution) {
+    for (int prior = constants::building_task_initial_prior; auto [p, type] : distribution) {
         tasks.emplace_back(make_coro([&, p, type, prior=prior--](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
             int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
             while (1) {
@@ -597,13 +566,17 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             auto scheme = getTransfersByDistribution<double>(distribution, robots, 0.001);
             auto &prod = scheme.prod;
             auto new_transfers = views::iota((size_t) 0, scheme.transfers.size()) | views::filter([&](size_t i) {
-                return scheme.specialty[i] == constants::my_specialty;
+                return scheme.specialty[i] == precalc::my_specialty;
             }) | views::transform([&](size_t i) -> auto& {
                 return scheme.transfers[i];
             });
 
             for (auto &x : scheme.transfers) {
                 x.count.round_to_denom(constants::max_valid_flow_denom);
+            }
+
+            for (auto [from, to, cnt, res] : new_transfers) {
+                cerr << from << "\t" << to << "\t" << cnt << "\t" << (res ? to_string(*res) : "NULL"sv).substr(0, 7) << "\n";
             }
 
             // cerr << prod << "\n";
@@ -665,6 +638,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 return precalc::real_distance(t.from, t.to);
             }), 0), game.maxFlyingWorkerGroups));
 
+            batching_factor = max(1, batching_factor);
+
             cerr << "batching_factor = " << batching_factor << "\n";
 
             // recalc static_robots
@@ -673,7 +648,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
             for (size_t i = 0; i < distribution.size(); ++i) {
                 auto p = distribution[i].first;
-                pre_static_robots[p] = scheme.static_robots[i][(int) constants::my_specialty];
+                pre_static_robots[p] = scheme.static_robots[i][(int) precalc::my_specialty];
             }
 
             for (auto [p, type] : distribution) {
@@ -702,19 +677,19 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                 }
             }
             
-            for (auto &g : game.flyingWorkerGroups) {
-                if (g.playerIndex != game.myIndex) {
-                    auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
-                        return x.first == p;
-                    });
-                    if (it != distribution.end()) {
-                        static_robots[g.targetPlanet] += g.number;
-                    }
-                }
-            }
+            // for (auto &g : game.flyingWorkerGroups) {
+            //     if (g.playerIndex != game.myIndex) {
+            //         auto it = ranges::find_if(distribution, [p = g.targetPlanet](auto &x) {
+            //             return x.first == p;
+            //         });
+            //         if (it != distribution.end()) {
+            //             static_robots[g.targetPlanet] += g.number;
+            //         }
+            //     }
+            // }
 
             // REWRITE THIS SHIT!!!
-            if (full.size()) {
+            if (full.size() && 0) {
                 auto planets = game.planets;
                 for (auto [p, type] : distribution)
                     planets[p].id = -1;
@@ -824,6 +799,13 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
         while (1) {
             co_await dispatcher.wait(1, constants::cycle_main_prior - 1);
+            for (size_t i = 0; i < transfers.size(); ++i) {
+                if (transfers[i].count > 0)
+                    cerr << flow[i] / transfers[i].count << " ";
+                else
+                    cerr << "0/0 ";
+            }
+            cerr << "\n";
             cerr << starts << " groups starts\n";
             starts = 0;
         }
@@ -949,7 +931,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     cerr << "need\t" << cnt - flow[i] << "\ton\t" << from << " - " << to << " in tick " << game.currentTick << "\n";
                 }
             }
-            co_await dispatcher.wait(batching_factor, constants::cycle_capture_prior);
+            // co_await dispatcher.wait(batching_factor, constants::cycle_capture_prior);
+            co_await dispatcher.wait(1, constants::cycle_capture_prior);
         }
     }).start();
 
@@ -977,21 +960,28 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     g.addEdge(from, t, 0, ceil(precalc::real_distance(from, to) * (cnt - flow[i])));
                 }
             }
+            for (size_t i = 0; i < game.planets.size(); ++i) {
+                int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i] + controller.onWayTo[i];
+                if (balance > 0) {
+                    // cerr << balance << " free robots on planet " << i << " in tick " << game.currentTick << "\n";
+                    if (balance > controller.onWayTo[i])
+                        g.addEdge(s, i, 0, balance - controller.onWayTo[i]);
+                    inputs.emplace_back(i);
+                } else if (balance < 0) {
+                    outputs.emplace_back(i);
+                    g.addEdge(i, t, 0, -balance);
+                }
+            }
+
             ranges::sort(outputs);
             auto to_remove = ranges::unique(outputs);
             outputs.erase(to_remove.begin(), to_remove.end());
-            for (size_t i = 0; i < game.planets.size(); ++i) {
-                if (int free = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i]; free > 0)
-                {
-                    g.addEdge(s, i, 0, free);
-                    inputs.emplace_back(i);
-                }
-            }
             for (auto i : inputs) {
                 for (auto o : outputs) {
                     g.addEdge(i, o, precalc::d[i][o]);
                 }
             }
+
             flows::mincost(g, s, t);
             for (auto i : inputs) {
                 for (auto x : g.edges[i]) {
@@ -1026,7 +1016,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
 void MyStrategy::play(Runner &runner)
 {
-    precalc::prepare(constants::my_specialty);
+    precalc::prepare();
 
     TaskQueue queue;
     Action act;
