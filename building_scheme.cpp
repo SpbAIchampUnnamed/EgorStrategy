@@ -382,20 +382,20 @@ double estimateBuildingScheme(BuildingScheme &building_scheme) {
         value += (1.0 / 3) * precalc::regular_real_distance(transfer.from, transfer.to) * transfer.count.num;
         value += (2.0 / 3) * precalc::logist_real_distance(transfer.from, transfer.to) * transfer.count.num;
     }
-    for (auto &p1: building_scheme.distribution) {
-        for (auto &p2: building_scheme.distribution) {
-            value += (1.0 / 15) * precalc::regular_real_distance(p1.first, p2.first);
-        }
-    }
-    int maxDistFrom0 = 100, maxDistFrom1 = 100, maxDistFrom2 = 100;
-    for (auto &p: building_scheme.distribution) {
-        maxDistFrom0 = max(maxDistFrom0, precalc::regular_real_distance(0, p.first));
-        maxDistFrom1 = max(maxDistFrom1, precalc::regular_real_distance(1, p.first));
-        maxDistFrom2 = max(maxDistFrom2, precalc::regular_real_distance(2, p.first));
-    }
-    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom0;
-    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom1;
-    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom2;
+//    for (auto &p1: building_scheme.distribution) {
+//        for (auto &p2: building_scheme.distribution) {
+//            value += (1.0 / 15) * precalc::regular_real_distance(p1.first, p2.first);
+//        }
+//    }
+//    int maxDistFrom0 = 100, maxDistFrom1 = 100, maxDistFrom2 = 100;
+//    for (auto &p: building_scheme.distribution) {
+//        maxDistFrom0 = max(maxDistFrom0, precalc::regular_real_distance(0, p.first));
+//        maxDistFrom1 = max(maxDistFrom1, precalc::regular_real_distance(1, p.first));
+//        maxDistFrom2 = max(maxDistFrom2, precalc::regular_real_distance(2, p.first));
+//    }
+//    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom0;
+//    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom1;
+//    value += (6.0 / 3) * building_scheme.distribution.size() * maxDistFrom2;
     return value;
 }
 
