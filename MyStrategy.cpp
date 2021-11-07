@@ -620,15 +620,15 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
             // cerr << "\n";
 
-            // for (size_t i = 0; i < distribution.size(); ++i) {
-            //     auto [p, type] = distribution[i];
-            //     for (auto spec : EnumValues<Specialty>::list) {
-            //         if (scheme.static_robots[i][(int) spec] > 0) {
-            //             cerr << scheme.static_robots[i][(int) spec] << "\trobots of " << to_string(spec).substr(0, 7) << "\ton ";
-            //             cerr << p << "\t" << to_string(type) << "\n";
-            //         }
-            //     }
-            // }
+            for (size_t i = 0; i < distribution.size(); ++i) {
+                auto [p, type] = distribution[i];
+                for (auto spec : EnumValues<Specialty>::list) {
+                    if (scheme.static_robots[i][(int) spec] != 0) {
+                        cerr << scheme.static_robots[i][(int) spec] << "\trobots of " << to_string(spec).substr(0, 7) << "\ton ";
+                        cerr << p << "\t" << to_string(type) << "\n";
+                    }
+                }
+            }
 
             // terminate();
 

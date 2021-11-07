@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <tuple>
 #include <array>
+#include <numeric>
 
 template<class CalcType>
 struct ProductionScheme {
@@ -27,6 +28,11 @@ ProductionScheme<CalcType> getTransfersByDistribution(
     using namespace std;
     using namespace model;
     using TransVar = tuple<int, int, optional<Resource>, Specialty>;
+    vector<int> distribution_indx(distribution.size());
+    iota(distribution_indx.begin(), distribution_indx.end(), 0);
+    ranges::sort(distribution_indx, [&](int a, int b) {
+        return distribution[a] < distribution[b];
+    });
     ranges::sort(distribution);
     array<int, EnumValues<BuildingType>::list.size()> balance{};
     for (auto type : EnumValues<BuildingType>::list) {
@@ -76,7 +82,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
     }
 
     // output * workAmount - work * produceAmount <= 0
-    // output / produceAmount <= work * workAmount
+    // output / produceAmount <= work / workAmount
     for (size_t i = 0; i < distribution.size(); ++i) {
         auto [p, type] = distribution[i];
         auto &bp = game.buildingProperties.at(type);
@@ -93,6 +99,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
                 continue;
             for (auto spec : EnumValues<Specialty>::list) {
                 auto index = ranges::lower_bound(trans_vars, TransVar{p, t, bp.produceResource, spec}) - trans_vars.begin();
+                ASSERT((size_t) index < trans_vars.size());
                 coefs[trans_vars_index + index] = bp.workAmount;
             }
         }
@@ -207,7 +214,7 @@ ProductionScheme<CalcType> getTransfersByDistribution(
     }
     for (auto spec : EnumValues<Specialty>::list) {
         for (size_t i = 0; i < distribution.size(); ++i) {
-            scheme.static_robots[i][(int) spec] = t[static_vars_index[(int) spec] + i];
+            scheme.static_robots[distribution_indx[i]][(int) spec] = t[static_vars_index[(int) spec] + i];
         }
     }
     return scheme;
