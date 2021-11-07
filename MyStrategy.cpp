@@ -290,13 +290,13 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     })->id;
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
-        auto &a_bp = game.buildingProperties.at(a.second);
-        auto &b_bp = game.buildingProperties.at(b.second);
-        if (a_bp.harvest != b_bp.harvest)
-            return pair(a_bp.harvest, a.first) > pair(b_bp.harvest, b.first);
-        if (a_bp.harvest)
-            return pair(a_bp.produceScore, a.first) > pair(b_bp.produceScore, b.first);
-        return pair(precalc::d[a.first][start_planet], a.first) > pair(precalc::d[b.first][start_planet], b.first);
+        // auto &a_bp = game.buildingProperties.at(a.second);
+        // auto &b_bp = game.buildingProperties.at(b.second);
+        // if (a_bp.harvest != b_bp.harvest)
+        //     return pair(a_bp.harvest, a.first) > pair(b_bp.harvest, b.first);
+        // if (a_bp.harvest)
+        //     return pair(a_bp.produceScore, a.first) > pair(b_bp.produceScore, b.first);
+        return pair(precalc::d[a.first][start_planet], a.first) < pair(precalc::d[b.first][start_planet], b.first);
     });
 
     vector<Transfer> transfers;
@@ -382,6 +382,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         int total_stone = 0;
         vector<optional<BuildingType>> planned(game.planets.size(), nullopt);
         vector<bool> used(game.planets.size());
+        vector<bool> my_used(game.planets.size());
         for (auto [p, type] : distribution) {
             planned[p] = type;
             total_stone += game.buildingProperties.at(type).buildResources.at(Resource::STONE);
@@ -394,6 +395,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     used[planet_index] = true;
                     if ((int) my_specialty == speciality) {
                         my_distribution.emplace_back(pair<int, BuildingType>(planet_index, planned[planet_index].value()));
+                        my_used[planet_index] = true;
                     }
                     stone_used += game.buildingProperties.at(planned[planet_index].value()).buildResources.at(Resource::STONE);
                     if (stone_used >= total_stone / 3 && speciality != 0) {
@@ -405,19 +407,31 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         for (int i = 2; i >= 0; i--) {
             generate_custom_distribution(i);
         }
+        for (auto [p, type] : distribution) {
+            if (!my_used[p]) {
+                my_distribution.emplace_back(p, type);
+            }
+        }
     }
 
-    for (int prior = constants::building_task_initial_prior; auto [p, type] : my_distribution) {
+    for (int prior = constants::building_task_initial_prior; auto [p, type] : distribution) {
         tasks.emplace_back(make_coro([&, p, type, prior=prior--](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
             int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
             while (1) {
-                if (game.planets[p].building && game.planets[p].building->buildingType == type) {
+                auto building_done = [&](int = 0) {
+                    return game.planets[p].building && game.planets[p].building->buildingType == type;
+                };
+                if (building_done()) {
                     co_await dispatcher.wait(1, prior);
                 } else {
                     int need_robots = stone_for_building;
                     stone_required += stone_for_building;
                     int runing_tasks = 0;
                     while (need_robots > 0 || runing_tasks > 0) {
+                        if (building_done()) {
+                            stone_required -= need_robots;
+                            need_robots = 0;
+                        }
                         int cnt = min(game.planets[start_planet].resources[Resource::STONE]
                                 - controller.reservedResources[start_planet][(int) Resource::STONE],
                             getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet]
@@ -429,7 +443,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                         if (cnt > 0) {
                             ++runing_tasks;
                             make_coro([&, cnt](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
-                                if (co_await controller.move(start_planet, p, cnt, Resource::STONE).start()) {
+                                if (co_await controller.move(start_planet, p, cnt, Resource::STONE, building_done).start()) {
                                     if (game.planets[p].resources[Resource::STONE] < stone_for_building) {
                                         --runing_tasks;
                                         co_return;
@@ -458,7 +472,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                                         --runing_tasks;
                                         co_return;
                                     }
-                                } else {
+                                } else if (!building_done()) {
                                     stone_required += cnt;
                                     need_robots += cnt;
                                 }
@@ -477,7 +491,12 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     tasks.emplace_back(make_coro([&](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
         while (1) {
             ASSERT(stone_required >= 0);
-            if (stone_required > controller.onWayTo[start_planet]) {
+            auto need = [&]() {
+                return stone_required - (getMyRobotsOnPlanet(start_planet)
+                    - controller.reservedRobots[start_planet]
+                    + controller.onWayTo[start_planet]);
+            };
+            if (need() > 0) {
                 bool f = 0;
                 unordered_set<BuildingType> used;
                 for (size_t i = 0; i < game.planets.size(); ++i) {
@@ -487,31 +506,36 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                         used.emplace(game.planets[i].building->buildingType);
                         continue;
                     }
-                    int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], stone_required - controller.onWayTo[start_planet]);
+                    int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], need());
                     ASSERT(c >= 0);
                     if (c > 0) {
                         f = 1;
                         controller.move(i, start_planet, c).start();
                     }
-                    if (stone_required <= controller.onWayTo[start_planet])
+                    if (need() <= 0)
                         break;
                 }
                 if (!f && !controller.onWayTo[start_planet]) {
                     for (size_t i = 0; i < game.planets.size(); ++i) {
                         if ((int) i == start_planet)
                             continue;
-                        int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], stone_required - controller.onWayTo[start_planet]);
+                        int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], need());
                         ASSERT(c >= 0);
                         if (c > 0) {
                             f = 1;
                             controller.move(i, start_planet, c).start();
                         }
-                        if (stone_required <= controller.onWayTo[start_planet])
+                        if (need() <= 0)
                             break;
                     }
                 }
             }
-            co_await dispatcher.wait(1, constants::repair_prior);
+            int reserved = min(stone_required, getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet]);
+            cerr << "reserved = " << reserved << "\n";
+            if (reserved > 0)
+                co_await controller.waitWithPrior(start_planet, reserved, 1, constants::repair_prior).start();
+            else
+                co_await dispatcher.wait(1, constants::repair_prior);
         }
     }).start());
 
