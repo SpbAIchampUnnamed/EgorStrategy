@@ -388,7 +388,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
         auto generate_custom_distribution = [&] (int speciality) {
             int stone_used = 0;
-            for (auto i = 0; i < game.planets.size(); ++i) {
+            for (size_t i = 0; i < game.planets.size(); ++i) {
                 if (planned[near_planets[speciality][i]] != nullopt && !used[near_planets[speciality][i]]) {
                     int planet_index = near_planets[speciality][i];
                     used[planet_index] = true;
@@ -407,7 +407,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }
 
-    for (int prior = constants::building_task_initial_prior; auto [p, type] : distribution) {
+    for (int prior = constants::building_task_initial_prior; auto [p, type] : my_distribution) {
         tasks.emplace_back(make_coro([&, p, type, prior=prior--](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
             int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
             while (1) {
