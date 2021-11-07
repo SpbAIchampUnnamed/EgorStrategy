@@ -679,6 +679,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             for (size_t i = 0; i < distribution.size(); ++i) {
                 auto p = distribution[i].first;
                 pre_static_robots[p] = scheme.static_robots[i][(int) precalc::my_specialty];
+                pre_static_robots[p].round_to_denom(constants::max_valid_flow_denom);
             }
 
             for (auto [p, type] : distribution) {
