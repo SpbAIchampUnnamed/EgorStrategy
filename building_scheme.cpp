@@ -307,10 +307,15 @@ BuildingScheme getInitialScheme() {
         }
         int dist = 0, alt_dist = 0;
         for (auto [p, _] : best_scheme.distribution) {
-            dist += precalc::logist_d[start_planet][p];
+            dist += precalc::logist_d[0][p];
+            dist += precalc::regular_d[1][p];
+            dist += precalc::regular_d[2][p];
             p = game.planets.size() - 1 - p;
-            alt_dist += precalc::logist_d[start_planet][p];
+            alt_dist += precalc::logist_d[0][p];
+            alt_dist += precalc::regular_d[1][p];
+            alt_dist += precalc::regular_d[2][p];
         }
+        cerr << dist << " vs " << alt_dist << "\n";
         if (alt_dist < dist) {
             for (auto &[p, _] : best_scheme.distribution) {
                 p = game.planets.size() - 1 - p;
