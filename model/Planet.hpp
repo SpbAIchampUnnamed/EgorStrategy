@@ -33,6 +33,8 @@ public:
     // Building on the planet
     std::optional<model::Building> building;
 
+    Planet() = default;
+
     Planet(int id, int x, int y, std::optional<model::Resource> harvestableResource, std::vector<model::WorkerGroup> workerGroups, std::unordered_map<model::Resource, int> resources, std::optional<model::Building> building);
 
     // Read Planet from input stream
@@ -43,6 +45,12 @@ public:
 
     // Get string representation of Planet
     std::string toString() const;
+
+    void clear() {
+        workerGroups.clear();
+        resources.clear();
+        building.reset();
+    }
 };
 
 inline int planets_dist(const Planet &a, const Planet &b) {

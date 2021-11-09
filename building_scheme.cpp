@@ -13,9 +13,9 @@ using namespace std;
 using namespace model;
 
 BuildingScheme getInitialScheme() {
-    auto start_planet = ranges::find_if(game.planets, [](auto &p) {
+    auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
         return p.workerGroups.size() && game.players[p.workerGroups[0].playerIndex].teamIndex == game.players[game.myIndex].teamIndex;
-    })->id;
+    })).id;
     int my_robots = getMyTeamRobotsCount();
     cerr << my_robots << "\n";
     auto cnts = getRobotCounts(BuildingType::REPLICATOR);
@@ -117,7 +117,7 @@ BuildingScheme getInitialScheme() {
             }
             {
                 MappingType from_mapping, to_mapping;
-                vector<int> balance(game.planets.size(), 0);
+                vector<int> balance(max_planet_index + 1, 0);
                 flows::FlowGraph g;
                 for (auto [f, t, c, _] : transfers) {
                     balance[f] -= c;
@@ -125,7 +125,7 @@ BuildingScheme getInitialScheme() {
                 }
                 int s = g.addVertex();
                 int t = g.addVertex();
-                for (size_t i = 0; i < game.planets.size(); ++i) {
+                for (auto i : views::keys(game.planets)) {
                     if (balance[i] < 0) {
                         int v = g.addVertex();
                         to_mapping.emplace_back(v, i);
@@ -141,13 +141,14 @@ BuildingScheme getInitialScheme() {
             return ans;
         };
         vector<pair<int, BuildingScheme>> schemes;
-        for (size_t i = 0; i < game.planets.size(); ++i) {
+        for (auto i : views::keys(game.planets)) {
             if (game.planets[i].workerGroups.size())
                 continue;
             schemes.emplace_back();
             auto &[cost, smul, distribution, transfers] = schemes.back().second;
             smul = mul;
-            auto planets = game.planets;
+            auto planets_view = views::values(game.planets);
+            vector<Planet> planets(planets_view.begin(), planets_view.end());
             sort(planets.begin(), planets.end(), [i](auto &a, auto &b) {
                 if (precalc::logist_d[i][a.id] != precalc::logist_d[i][b.id])
                     return precalc::logist_d[i][a.id] < precalc::logist_d[i][b.id];
@@ -310,7 +311,7 @@ BuildingScheme getInitialScheme() {
             dist += precalc::logist_d[0][p];
             dist += precalc::regular_d[1][p];
             dist += precalc::regular_d[2][p];
-            p = game.planets.size() - 1 - p;
+            p = max_planet_index - p;
             alt_dist += precalc::logist_d[0][p];
             alt_dist += precalc::regular_d[1][p];
             alt_dist += precalc::regular_d[2][p];
@@ -318,11 +319,11 @@ BuildingScheme getInitialScheme() {
         cerr << dist << " vs " << alt_dist << "\n";
         if (alt_dist < dist) {
             for (auto &[p, _] : best_scheme.distribution) {
-                p = game.planets.size() - 1 - p;
+                p = max_planet_index - p;
             }
             for (auto &[from, to, cnt, res] : best_scheme.transfers) {
-                from = game.planets.size() - 1 - from;
-                to = game.planets.size() - 1 - to;
+                from = max_planet_index - from;
+                to = max_planet_index - to;
             }
         }
         cerr << "total_robots = " << robots << " + " << best_scheme.cost << " = " << robots + best_scheme.cost << "\n";
@@ -339,7 +340,7 @@ BuildingScheme getInitialScheme() {
 BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
     BuildingScheme new_building_scheme = building_scheme;
     double best_value = estimateBuildingScheme(new_building_scheme);
-    vector <optional<BuildingType>> planet_building(game.planets.size(), nullopt);
+    vector <optional<BuildingType>> planet_building(max_planet_index + 1, nullopt);
     for (auto &[planet_index, building]: new_building_scheme.distribution) {
         planet_building[planet_index] = building;
     }

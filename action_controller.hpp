@@ -19,9 +19,9 @@ struct ActionController {
     std::vector<std::array<int, model::EnumValues<model::Resource>::list.size()>> reservedResources;
     ActionController(Dispatcher &dispatcher):
         dispatcher(dispatcher),
-        reservedRobots(model::game.planets.size(), 0),
-        onWayTo(model::game.planets.size()),
-        reservedResources(model::game.planets.size()) {}
+        reservedRobots(model::max_planet_index + 1, 0),
+        onWayTo(model::max_planet_index + 1),
+        reservedResources(model::max_planet_index + 1) {}
 
     template<class Callback>
     coro::Task<bool> move(int from, int to, int count, std::optional<model::Resource> res, Callback callback) {

@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <random>
 #include <set>
+#include <functional>
 
 using namespace std;
 using namespace model;
@@ -37,8 +38,8 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 
     vector<pair<int, BuildingType>> distribution;
 
-    for (auto &p : game.planets) {
-        if (precalc::d[p.id][start_planet] < precalc::d[game.planets.size() - 1 - p.id][start_planet] && p.harvestableResource) {
+    for (auto &p : views::values(game.planets)) {
+        if (precalc::d[p.id][start_planet] < precalc::d[max_planet_index - p.id][start_planet] && p.harvestableResource) {
             for (auto &[type, prop] : game.buildingProperties) {
                 if (prop.produceResource == p.harvestableResource) {
                     distribution.emplace_back(p.id, type);
@@ -94,7 +95,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
                     targets.emplace_back(g.targetPlanet, g.number);
                 } 
             }
-            for (auto &p : game.planets) {
+            for (auto &p : views::values(game.planets)) {
                 if (ranges::reduce(p.resources | views::transform([](auto &x)->auto& { return x.second; }), 0)
                     && p.workerGroups.size() == 1 && p.workerGroups[0].playerIndex != game.myIndex)
                 {
@@ -102,7 +103,9 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
                 }
             }
             auto cur = targets.begin();
-            for (size_t i = 0; i < game.planets.size() && cur != targets.end(); ++i) {
+            for (auto i : views::keys(game.planets)) {
+                if (cur == targets.end())
+                    break;
                 if (getMyRobotsOnPlanet(i) - controller.reservedRobots[i] > 0 && (int) i != start_planet) {
                     auto it = ranges::find_if(distribution, [i](auto &x) {
                         return x.first == (int) i;
@@ -125,7 +128,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 
     make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
         while (1) {
-            for (size_t i = 0; i < game.planets.size(); ++i) {
+            for (auto i : views::keys(game.planets)) {
                 if (getMyRobotsOnPlanet(i) - controller.reservedRobots[i] > 0 && (int) i != start_planet) {
                     auto it = ranges::find_if(distribution, [i](auto &x) {
                         return x.first == (int) i;
@@ -149,7 +152,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 
     auto balance_task = make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
         while (1) {
-            flows::FlowGraph g(game.planets.size());
+            flows::FlowGraph g(max_planet_index + 1);
             int s = g.addVertex();
             int t = g.addVertex();
             vector<int> inputs, outputs;
@@ -285,9 +288,9 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     //     cerr << "Optimize end\n";
     // }
 
-    auto start_planet = ranges::find_if(game.planets, [](auto &p) {
+    auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
         return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
-    })->id;
+    })).id;
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
         // auto &a_bp = game.buildingProperties.at(a.second);
@@ -326,8 +329,12 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     make_coro([&]<class Self>(const Self &) -> LambdaTask<Self, void> {
         int maxWorkers = game.buildingProperties.at(BuildingType::QUARRY).maxWorkers;
         int reserved = 0;
-        vector<int> indx(game.planets.size() - 1);
-        iota(indx.begin(), indx.end(), 1);
+        vector<int> indx;
+        ranges::copy(views::values(game.planets) | views::filter([](auto &p) {
+            return !p.building || p.building->buildingType != BuildingType::QUARRY;
+        }) | views::transform([](auto &p) {
+            return p.id;
+        }), back_inserter(indx));
         ranges::sort(indx, [start_planet](int a, int b) {
             return pair(precalc::d[start_planet][a], a) < pair(precalc::d[start_planet][b], b);
         });
@@ -380,16 +387,16 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     vector<pair<int, BuildingType>> my_distribution(0);
     {
         int total_stone = 0;
-        vector<optional<BuildingType>> planned(game.planets.size(), nullopt);
-        vector<bool> used(game.planets.size());
-        vector<bool> my_used(game.planets.size());
+        vector<optional<BuildingType>> planned(max_planet_index + 1, nullopt);
+        vector<bool> used(max_planet_index + 1);
+        vector<bool> my_used(max_planet_index + 1);
         for (auto [p, type] : distribution) {
             planned[p] = type;
             total_stone += game.buildingProperties.at(type).buildResources.at(Resource::STONE);
         }
         auto generate_custom_distribution = [&] (int speciality) {
             int stone_used = 0;
-            for (size_t i = 0; i < game.planets.size(); ++i) {
+            for (auto i : views::keys(game.planets)) {
                 if (planned[near_planets[speciality][i]] != nullopt && !used[near_planets[speciality][i]]) {
                     int planet_index = near_planets[speciality][i];
                     used[planet_index] = true;
@@ -499,7 +506,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
             if (need() > 0) {
                 bool f = 0;
                 unordered_set<BuildingType> used;
-                for (size_t i = 0; i < game.planets.size(); ++i) {
+                for (auto i : views::keys(game.planets)) {
                     if ((int) i == start_planet)
                         continue;
                     if (game.planets[i].building && !used.contains(game.planets[i].building->buildingType)) {
@@ -516,7 +523,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                         break;
                 }
                 if (!f && !controller.onWayTo[start_planet]) {
-                    for (size_t i = 0; i < game.planets.size(); ++i) {
+                    for (auto i : views::keys(game.planets)) {
                         if ((int) i == start_planet)
                             continue;
                         int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], need());
@@ -539,41 +546,12 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start());
 
-    // vector<int> bobbles(game.planets.size(), 0);
-    // vector<char> help(game.planets.size(), 0);
-
     int batching_factor = 1;
-
-    vector<int> static_robots(game.planets.size());
-
-    // int initial_robots = getMyRobotsCount();
-    // int max_usable_robots = 1e6;
-    // {
-    //     vector<Fraction<long long>> initail_static_robots(game.planets.size(), 0);
-    //     for (auto [from, to, count, res] : transfers) {
-    //         if (!res)
-    //             continue;
-    //         auto it = ranges::find_if(distribution, [from](auto &x) {
-    //             return x.first == from;
-    //         });
-    //         auto &bp = game.buildingProperties.at(it->second);
-    //         initail_static_robots[from] += count * bp.workAmount / bp.produceAmount;
-    //     }
-    //     for (auto [p, type] : distribution) {
-    //         if (type == BuildingType::REPLICATOR)
-    //             continue;
-    //         auto &bp = game.buildingProperties.at(type);
-    //         ASSERT(bp.maxWorkers >= initail_static_robots[p]);
-    //         max_usable_robots = min(max_usable_robots, ceil(initial_robots * bp.maxWorkers / initail_static_robots[p]));
-    //     }
-    // }
-
-    // cerr << "max_usable_robots = " << max_usable_robots << "\n";
-
+    vector<int> static_robots(max_planet_index + 1);
     vector<Fraction<long long>> flow;
 
     make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {    
-        vector<Fraction<long long>> pre_static_robots(game.planets.size());
+        vector<Fraction<long long>> pre_static_robots(max_planet_index + 1);
         while (1) {
             // check rush
 
@@ -745,7 +723,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
             // REWRITE THIS SHIT!!!
             if (full.size() && 0) {
-                auto planets = game.planets;
+                vector<Planet> planets;
+                ranges::copy(views::values(game.planets), back_inserter(planets));
                 for (auto [p, type] : distribution)
                     planets[p].id = -1;
                 sort(planets.begin(), planets.end(), [&](auto &a, auto &b) {
@@ -939,7 +918,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     int robots = getMyRobotsOnPlanet(from) - controller.reservedRobots[from] - static_robots[from];
                     if (robots <= 0)
                         break;
-                    vector<char> used(game.planets.size(), 0);
+                    vector<char> used(max_planet_index + 1, 0);
                     vector<int> path = {(int) i};
                     auto dfs = [&](auto &dfs, int v, int t) -> bool {
                         used[v] = 1;
@@ -1003,7 +982,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     tasks.emplace_back(make_coro([&](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
         co_await dispatcher.wait(0, constants::free_robots_prior);
         while (1) {
-            flows::FlowGraph g(game.planets.size());
+            flows::FlowGraph g(max_planet_index + 1);
             int s = g.addVertex();
             int t = g.addVertex();
             vector<int> inputs, outputs;
@@ -1015,7 +994,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     g.addEdge(from, t, 0, ceil(precalc::real_distance(from, to) * (cnt - flow[i])));
                 }
             }
-            for (size_t i = 0; i < game.planets.size(); ++i) {
+            for (auto i : views::keys(game.planets)) {
                 int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i] + controller.onWayTo[i];
                 if (balance > 0) {
                     // cerr << balance << " free robots on planet " << i << " in tick " << game.currentTick << "\n";
@@ -1046,7 +1025,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     }
                 }
             }
-            for (size_t i = 0; i < game.planets.size(); ++i) {
+            for (auto i : views::keys(game.planets)) {
                 int c = getMyRobotsOnPlanet(i) - controller.reservedRobots[i];
                 if (c > 0 && ranges::find_if(distribution, [i=int(i)](auto &x) { return x.first == i; }) == distribution.end()) {
                     auto filtered = distribution | views::filter([] (auto &x) {

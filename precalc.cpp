@@ -10,26 +10,29 @@ using namespace model;
 namespace precalc {
 
     model::Specialty my_specialty;
-    Graph<> regular_planets_graph;
-    Graph<> logist_planets_graph;
-    std::vector <std::vector<int>> regular_prev;
-    std::vector <std::vector<int>> logist_prev;
-    std::vector <std::vector<int>> regular_d;
-    std::vector <std::vector<int>> logist_d;
-    std::ranges::subrange< decltype(regular_d)::iterator> d;
-    std::ranges::subrange< decltype(regular_prev)::iterator> prev;
-    std::vector <std::vector<int>> near_planets;
+    Graph<> regular_planets_graph(max_planet_index + 1);;
+    Graph<> logist_planets_graph(max_planet_index + 1);
+    std::array<std::array<int, model::max_planet_index + 1>, model::max_planet_index + 1> regular_prev;
+    std::array<std::array<int, model::max_planet_index + 1>, model::max_planet_index + 1> logist_prev;
+    std::array<std::array<int, model::max_planet_index + 1>, model::max_planet_index + 1> regular_d;
+    std::array<std::array<int, model::max_planet_index + 1>, model::max_planet_index + 1> logist_d;
+    std::ranges::subrange<decltype(regular_d)::iterator> d;
+    std::ranges::subrange<decltype(regular_prev)::iterator> prev;
+    std::vector<std::vector<int>> near_planets;
 
     void prepare() {
-        for (size_t i = 0; i < 3; ++i) {
-            if (game.planets[i].workerGroups.size() && game.planets[i].workerGroups[0].playerIndex == game.myIndex) {
-                my_specialty = (Specialty) i;
+        if (game.currentTick == 0) {
+            for (size_t i = 0; i < 3; ++i) {
+                if (game.planets[i].workerGroups.size() && game.planets[i].workerGroups[0].playerIndex == game.myIndex) {
+                    my_specialty = (Specialty) i;
+                }
             }
         }
-        regular_planets_graph = Graph(game.planets.size());
-        logist_planets_graph = Graph(game.planets.size());
-        for (auto &x: game.planets) {
-            for (auto &y: game.planets) {
+        for (auto i : views::keys(game.planets)) {
+            regular_planets_graph.edges[i].clear();
+        }
+        for (auto &x: views::values(game.planets)) {
+            for (auto &y: views::values(game.planets)) {
                 if (planets_dist(x, y) <= game.maxTravelDistance) {
                     regular_planets_graph.edges[x.id].emplace_back(y.id);
                     regular_planets_graph.edges[y.id].emplace_back(x.id);
@@ -58,12 +61,10 @@ namespace precalc {
             d = decltype(d)(regular_d.begin(), regular_d.end());
             prev = decltype(prev)(regular_prev.begin(), regular_prev.end());
         }
-        near_planets.resize(game.planets.size());
+        near_planets.resize(max_planet_index + 1);
         for (size_t i = 0; i < game.planets.size(); i++) {
             near_planets[i].resize(game.planets.size());
-            for (size_t j = 0; j < game.planets.size(); j++) {
-                near_planets[i][j] = j;
-            }
+            ranges::copy(views::keys(game.planets), near_planets[i].begin());
             sort(near_planets[i].begin(), near_planets[i].end(), [i](int a, int b) {
                 return pair(regular_d[a][i], a) < pair(regular_d[b][i], b);
             });

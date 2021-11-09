@@ -1,8 +1,10 @@
 #include "Game.hpp"
+#include "assert.hpp"
+#include <ranges>
 
 namespace model {
 
-Game::Game(int myIndex, int currentTick, int maxTickCount, std::vector<model::Player> players, std::vector<model::Planet> planets, std::vector<model::FlyingWorkerGroup> flyingWorkerGroups, int maxFlyingWorkerGroups, int maxTravelDistance, int logisticsUpgrade, int productionUpgrade, int combatUpgrade, int maxBuilders, std::unordered_map<model::BuildingType, model::BuildingProperties> buildingProperties, bool specialtiesAllowed, std::optional<int> viewDistance) : myIndex(myIndex), currentTick(currentTick), maxTickCount(maxTickCount), players(players), planets(planets), flyingWorkerGroups(flyingWorkerGroups), maxFlyingWorkerGroups(maxFlyingWorkerGroups), maxTravelDistance(maxTravelDistance), logisticsUpgrade(logisticsUpgrade), productionUpgrade(productionUpgrade), combatUpgrade(combatUpgrade), maxBuilders(maxBuilders), buildingProperties(buildingProperties), specialtiesAllowed(specialtiesAllowed), viewDistance(viewDistance) { }
+Game::Game(int myIndex, int currentTick, int maxTickCount, std::vector<model::Player> players, std::unordered_map<int, model::Planet> planets, std::vector<model::FlyingWorkerGroup> flyingWorkerGroups, int maxFlyingWorkerGroups, int maxTravelDistance, int logisticsUpgrade, int productionUpgrade, int combatUpgrade, int maxBuilders, std::unordered_map<model::BuildingType, model::BuildingProperties> buildingProperties, bool specialtiesAllowed, std::optional<int> viewDistance) : myIndex(myIndex), currentTick(currentTick), maxTickCount(maxTickCount), players(players), planets(planets), flyingWorkerGroups(flyingWorkerGroups), maxFlyingWorkerGroups(maxFlyingWorkerGroups), maxTravelDistance(maxTravelDistance), logisticsUpgrade(logisticsUpgrade), productionUpgrade(productionUpgrade), combatUpgrade(combatUpgrade), maxBuilders(maxBuilders), buildingProperties(buildingProperties), specialtiesAllowed(specialtiesAllowed), viewDistance(viewDistance) { }
 
 // Read Game from input stream
 Game Game::readFrom(InputStream& stream) {
@@ -16,12 +18,12 @@ Game Game::readFrom(InputStream& stream) {
         model::Player playersElement = model::Player::readFrom(stream);
         players.emplace_back(playersElement);
     }
-    std::vector<model::Planet> planets = std::vector<model::Planet>();
+    std::unordered_map<int, model::Planet> planets;
     size_t planetsSize = stream.readInt();
     planets.reserve(planetsSize);
     for (size_t planetsIndex = 0; planetsIndex < planetsSize; planetsIndex++) {
         model::Planet planetsElement = model::Planet::readFrom(stream);
-        planets.emplace_back(planetsElement);
+        planets[planetsElement.id] = planetsElement;
     }
     std::vector<model::FlyingWorkerGroup> flyingWorkerGroups = std::vector<model::FlyingWorkerGroup>();
     size_t flyingWorkerGroupsSize = stream.readInt();
@@ -63,7 +65,7 @@ void Game::writeTo(OutputStream& stream) const {
         playersElement.writeTo(stream);
     }
     stream.write((int)(planets.size()));
-    for (const model::Planet& planetsElement : planets) {
+    for (const model::Planet& planetsElement : std::views::values(planets)) {
         planetsElement.writeTo(stream);
     }
     stream.write((int)(flyingWorkerGroups.size()));
@@ -119,9 +121,8 @@ std::string Game::toString() const {
     ss << ", ";
     ss << "planets: ";
     ss << "[ ";
-    for (size_t planetsIndex = 0; planetsIndex < planets.size(); planetsIndex++) {
-        const model::Planet& planetsElement = planets[planetsIndex];
-        if (planetsIndex != 0) {
+    for (int planetsIndex = 0; auto &planetsElement : std::views::values(planets)) {
+        if (planetsIndex++ != 0) {
             ss << ", ";
         }
         ss << planetsElement.toString();
@@ -185,6 +186,53 @@ std::string Game::toString() const {
     }
     ss << " }";
     return ss.str();
+}
+
+void Game::extend(Game &&other) {
+    currentTick = other.currentTick;
+    players = std::move(other.players);
+    flyingWorkerGroups = std::move(other.flyingWorkerGroups);
+    auto hash = [](const std::pair<int, int> &p) {
+        return std::hash<int>()(p.first) ^ std::hash<int>()(p.second);
+    };
+    std::unordered_map<std::pair<int, int>, Planet*, decltype(hash)> coord_to_planet;
+    for (auto &p : std::views::values(game.planets)) {
+        p.clear();
+        coord_to_planet[{p.x, p.y}] = &p;
+    }
+    for (auto &[id, new_planet] : other.planets) {
+        if (coord_to_planet.contains({new_planet.x, new_planet.y})) {
+            new_planet.id = coord_to_planet[{new_planet.x, new_planet.y}]->id;
+            if (new_planet.id > max_planet_index / 2) {
+                if (planetsCount > 0) {
+                    ASSERT(planetsCount == id + max_planet_index - new_planet.id + 1);
+                } else {
+                    planetsCount = id + max_planet_index - new_planet.id + 1;
+                }
+            }
+            *coord_to_planet[{new_planet.x, new_planet.y}] = std::move(new_planet);
+        } else {
+            planets[max_planet_index - id] = new_planet;
+            planets[max_planet_index - id].clear();
+            planets[max_planet_index - id].id = max_planet_index - id;
+            coord_to_planet[{max_coords - new_planet.x, max_coords - new_planet.y}] = &planets[max_planet_index - id];
+            planets[id] = std::move(new_planet);
+            coord_to_planet[{new_planet.x, new_planet.y}] = &planets[id];
+        }
+    }
+    for (auto &g : flyingWorkerGroups) {
+        auto normalize = [this, &coord_to_planet](int &id) {
+            if (planets.contains(id))
+                return;
+            else if (planetsCount > 0 && planets.contains(planetsCount - 1 - id))
+                id = max_planet_index - (planetsCount - 1 - id);
+            else
+                id = -1;
+        };
+        normalize(g.departurePlanet);
+        normalize(g.nextPlanet);
+        normalize(g.targetPlanet);
+    }
 }
 
 Game game;

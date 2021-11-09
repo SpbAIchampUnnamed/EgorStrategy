@@ -20,9 +20,13 @@
 
 namespace model {
 
+constexpr int max_coords = 29;
+constexpr int max_planet_index = 500;
+
 // Current game's state
 class Game {
 public:
+    int planetsCount = -1;
     // Your player's index
     int myIndex;
     // Current tick number
@@ -32,7 +36,7 @@ public:
     // List of players
     std::vector<model::Player> players;
     // List of planets
-    std::vector<model::Planet> planets;
+    std::unordered_map<int, model::Planet> planets;
     // List of flying worker groups
     std::vector<model::FlyingWorkerGroup> flyingWorkerGroups;
     // Max number of flying worker groups for one player
@@ -56,7 +60,7 @@ public:
 
     Game() = default;
 
-    Game(int myIndex, int currentTick, int maxTickCount, std::vector<model::Player> players, std::vector<model::Planet> planets, std::vector<model::FlyingWorkerGroup> flyingWorkerGroups, int maxFlyingWorkerGroups, int maxTravelDistance, int logisticsUpgrade, int productionUpgrade, int combatUpgrade, int maxBuilders, std::unordered_map<model::BuildingType, model::BuildingProperties> buildingProperties, bool specialtiesAllowed, std::optional<int> viewDistance);
+    Game(int myIndex, int currentTick, int maxTickCount, std::vector<model::Player> players, std::unordered_map<int, model::Planet> planets, std::vector<model::FlyingWorkerGroup> flyingWorkerGroups, int maxFlyingWorkerGroups, int maxTravelDistance, int logisticsUpgrade, int productionUpgrade, int combatUpgrade, int maxBuilders, std::unordered_map<model::BuildingType, model::BuildingProperties> buildingProperties, bool specialtiesAllowed, std::optional<int> viewDistance);
 
     // Read Game from input stream
     static Game readFrom(InputStream& stream);
@@ -66,6 +70,8 @@ public:
 
     // Get string representation of Game
     std::string toString() const;
+
+    void extend(Game &&other);
 };
 
 extern Game game;
