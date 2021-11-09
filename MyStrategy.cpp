@@ -55,7 +55,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
              < tuple(-b_score, precalc::d[start_planet][b.first], b.first);
     });
 
-    auto intercept = [&](const auto &self, int count, int my_planet, int enemy_planet) -> LambdaTask<decay_t<decltype(self)>, void> {
+    auto intercept = [&](auto self, int count, int my_planet, int enemy_planet) -> Task<void> {
         auto it = ranges::min_element(distribution, [&](auto &a, auto &b) {
             return precalc::d[a.first][enemy_planet] < precalc::d[b.first][enemy_planet];
         });
@@ -87,7 +87,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
     constexpr int stone_for_building = 50;
     constexpr int max_workers = 100;
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             vector<pair<int, int>> targets;
             for (auto &g : game.flyingWorkerGroups) {
@@ -126,7 +126,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
         }
     }).start();
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             for (auto i : views::keys(game.planets)) {
                 if (getMyRobotsOnPlanet(i) - controller.reservedRobots[i] > 0 && (int) i != start_planet) {
@@ -150,7 +150,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
         }
     }).start();
 
-    auto balance_task = make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    auto balance_task = make_coro([&](auto self) -> Task<void> {
         while (1) {
             flows::FlowGraph g(max_planet_index + 1);
             int s = g.addVertex();
@@ -219,7 +219,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
             || getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet] < stone_for_building)
             co_await dispatcher.wait(1);
         cerr << "start to " << p << "\n";
-        make_coro([&, p, type]<class Self>(const Self&) -> LambdaTask<Self, void> {
+        make_coro([&, p, type](auto self) -> Task<void> {
             co_await controller.move(start_planet, p, stone_for_building, Resource::STONE).start();
             Action act;
             while (game.planets[p].building && game.planets[p].building->buildingType != type) {
@@ -236,7 +236,7 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
         co_await dispatcher.wait(1);
     }
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             if (int cnt = getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet]; cnt > 0) {
                 for (auto [p, type] : distribution) {
@@ -263,6 +263,8 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
 
     // auto start_time = clock();
+
+    // co_await 
 
     auto [cost, best_mul, distribution, _] = getInitialScheme();
 
@@ -326,7 +328,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
     int stone_required = 0;
 
-    make_coro([&]<class Self>(const Self &) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         int maxWorkers = game.buildingProperties.at(BuildingType::QUARRY).maxWorkers;
         int reserved = 0;
         vector<int> indx;
@@ -422,7 +424,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     }
 
     for (int prior = constants::building_task_initial_prior; auto [p, type] : distribution) {
-        tasks.emplace_back(make_coro([&, p, type, prior=prior--](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+        tasks.emplace_back(make_coro([&, p, type, prior=prior--](auto self) -> Task<void> {
             int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
             while (1) {
                 auto building_done = [&](int = 0) {
@@ -449,7 +451,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                         stone_required -= cnt;
                         if (cnt > 0) {
                             ++runing_tasks;
-                            make_coro([&, cnt](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+                            make_coro([&, cnt](auto self) -> Task<void> {
                                 if (co_await controller.move(start_planet, p, cnt, Resource::STONE, building_done).start()) {
                                     if (game.planets[p].resources[Resource::STONE] < stone_for_building) {
                                         --runing_tasks;
@@ -495,7 +497,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }).start());
     }
 
-    tasks.emplace_back(make_coro([&](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+    tasks.emplace_back(make_coro([&](auto self) -> Task<void> {
         while (1) {
             ASSERT(stone_required >= 0);
             auto need = [&]() {
@@ -550,7 +552,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     vector<int> static_robots(max_planet_index + 1);
     vector<Fraction<long long>> flow;
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {    
+    make_coro([&](auto self) -> Task<void> {    
         vector<Fraction<long long>> pre_static_robots(max_planet_index + 1);
         while (1) {
             // check rush
@@ -757,7 +759,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                     it->id = -1;
 
                     make_coro([&, p, type=t, prior = constants::building_task_initial_prior - int(distribution.size())]
-                        (const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+                        (auto self) -> Task<void> {
                         int stone_for_building = game.buildingProperties.at(type).buildResources.at(Resource::STONE);
                         while (1) {
                             if (game.planets[p].building && game.planets[p].building->buildingType == type) {
@@ -776,7 +778,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
                                     stone_required -= cnt;
                                     if (cnt > 0) {
                                         ++runing_tasks;
-                                        make_coro([&, cnt](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+                                        make_coro([&, cnt](auto self) -> Task<void> {
                                             if (co_await controller.move(start_planet, p, cnt, Resource::STONE).start()) {
                                                 if (game.planets[p].resources[Resource::STONE] < stone_for_building) {
                                                     --runing_tasks;
@@ -830,7 +832,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
     int starts = 0;
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             co_await dispatcher.wait(1, constants::cycle_main_prior - 1);
             for (size_t i = 0; i < transfers.size(); ++i) {
@@ -845,7 +847,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start();
 
-    auto group_loop = [&](const auto &self, vector<int> path, int cnt) -> LambdaTask<decay_t<decltype(self)>, void> {
+    auto group_loop = [&](auto self, vector<int> path, int cnt) -> Task<void> {
         int len = 0;
         for (auto i : path) {
             auto [from, to, cnt, res] = transfers[i];
@@ -910,7 +912,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     };
 
-    make_coro([&]<class Self>(const Self &) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             for (size_t i = 0; i < transfers.size(); ++i) {
                 auto [from, to, cnt, res] = transfers[i];
@@ -970,7 +972,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start();
 
-    make_coro([&]<class Self>(const Self&) -> LambdaTask<Self, void> {
+    make_coro([&](auto self) -> Task<void> {
         while (1) {
             for (size_t i = 0; i < transfers.size(); ++i) {
                 flow[i].round_to_denom(constants::max_valid_flow_denom);
@@ -979,7 +981,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         }
     }).start();
 
-    tasks.emplace_back(make_coro([&](const auto &self) -> LambdaTask<decay_t<decltype(self)>, void> {
+    tasks.emplace_back(make_coro([&](auto self) -> Task<void> {
         co_await dispatcher.wait(0, constants::free_robots_prior);
         while (1) {
             flows::FlowGraph g(max_planet_index + 1);

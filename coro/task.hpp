@@ -97,6 +97,7 @@ protected:
     class Promise;
 public:
     using promise_type = detail::Promise<Task, Result>;
+    using ResultType = Result;
 protected:
     promise_type *promise = nullptr;
 
