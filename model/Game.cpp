@@ -221,8 +221,12 @@ void Game::extend(Game &&other) {
     if (planetsCount > 0) {
         for (auto &[id, p] : planets) {
             if (!planets.contains(planetsCount - 1 - id)) {
-                planets[planetsCount - 1 - id] = p;
-                planets[planetsCount - 1 - id].clear();
+                int mirror_id = planetsCount - 1 - id;
+                planets[mirror_id] = p;
+                planets[mirror_id].x = max_coords - p.x;
+                planets[mirror_id].y = max_coords - p.y;
+                planets[mirror_id].id = mirror_id;
+                planets[mirror_id].clear();
             }
         }
     }
