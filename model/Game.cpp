@@ -192,6 +192,11 @@ void Game::extend(Game &&other) {
     currentTick = other.currentTick;
     players = std::move(other.players);
     flyingWorkerGroups = std::move(other.flyingWorkerGroups);
+    for (auto &[id, p] : planets) {
+        if (!other.planets.contains(id)) {
+            p.clear();
+        }
+    }
     for (auto &[id, new_planet] : other.planets) {
         planets[id] = std::move(new_planet);
     }
@@ -200,7 +205,6 @@ void Game::extend(Game &&other) {
     };
     std::unordered_map<std::pair<int, int>, Planet*, decltype(hash)> coord_to_planet;
     for (auto &p : std::views::values(game.planets)) {
-        p.clear();
         coord_to_planet[{p.x, p.y}] = &p;
     }
     if (planetsCount == -1) {

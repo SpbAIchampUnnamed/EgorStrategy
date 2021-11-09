@@ -26,7 +26,7 @@ template<bool return_edge = false, class Edge, class F>
 auto dijkstra(const Graph<Edge> &g, int start, F &&edge_func) {
     using namespace std;
     using DistType = decltype(edge_func(0, declval<Edge&>()).second);
-    vector<DistType> d(g.n(), numeric_limits<int>::max() / 2);
+    vector<DistType> d(g.n(), numeric_limits<DistType>::max() / 2);
     vector<conditional_t<return_edge, pair<int, Edge>, int>> p(g.n());
     for (auto &x : p) {
         if constexpr (return_edge) {
