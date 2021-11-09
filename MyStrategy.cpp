@@ -264,8 +264,6 @@ Task<void> main_coro(Dispatcher &dispatcher) {
 
     // auto start_time = clock();
 
-    // co_await 
-
     auto [cost, best_mul, distribution, _] = getInitialScheme();
 
     // {
@@ -1063,6 +1061,7 @@ void MyStrategy::play(Runner &runner)
     while (!queue.empty()) {
         while (queue.top().tick > game.currentTick) {
             runner.update(act);
+            precalc::prepare();
             act.clear();
         }
         auto h = queue.top().handle;
