@@ -11,6 +11,7 @@
 #include "model/Resource.hpp"
 #include "model/Specialty.hpp"
 #include "model/WorkerGroup.hpp"
+#include "model/const.hpp"
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -19,9 +20,6 @@
 #include <vector>
 
 namespace model {
-
-constexpr int max_coords = 29;
-constexpr int max_planet_index = 500;
 
 // Current game's state
 class Game {

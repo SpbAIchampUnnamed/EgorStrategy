@@ -192,6 +192,9 @@ void Game::extend(Game &&other) {
     currentTick = other.currentTick;
     players = std::move(other.players);
     flyingWorkerGroups = std::move(other.flyingWorkerGroups);
+    for (auto &[id, new_planet] : other.planets) {
+        planets[id] = std::move(new_planet);
+    }
     auto hash = [](const std::pair<int, int> &p) {
         return std::hash<int>()(p.first) ^ std::hash<int>()(p.second);
     };
@@ -200,32 +203,29 @@ void Game::extend(Game &&other) {
         p.clear();
         coord_to_planet[{p.x, p.y}] = &p;
     }
-    for (auto &[id, new_planet] : other.planets) {
-        if (coord_to_planet.contains({new_planet.x, new_planet.y})) {
-            new_planet.id = coord_to_planet[{new_planet.x, new_planet.y}]->id;
-            if (new_planet.id > max_planet_index / 2) {
-                if (planetsCount > 0) {
-                    ASSERT(planetsCount == id + max_planet_index - new_planet.id + 1);
-                } else {
-                    planetsCount = id + max_planet_index - new_planet.id + 1;
-                }
+    if (planetsCount == -1) {
+        for (auto &[coords, planet] : coord_to_planet) {
+            auto [x, y] = coords;
+            x = max_coords - x;
+            y = max_coords - y;
+            if (coord_to_planet.contains({x, y})) {
+                planetsCount = planet->id + coord_to_planet[{x, y}]->id + 1;
+                break;
             }
-            *coord_to_planet[{new_planet.x, new_planet.y}] = std::move(new_planet);
-        } else {
-            planets[max_planet_index - id] = new_planet;
-            planets[max_planet_index - id].clear();
-            planets[max_planet_index - id].id = max_planet_index - id;
-            coord_to_planet[{max_coords - new_planet.x, max_coords - new_planet.y}] = &planets[max_planet_index - id];
-            planets[id] = std::move(new_planet);
-            coord_to_planet[{new_planet.x, new_planet.y}] = &planets[id];
+        }
+    }
+    if (planetsCount > 0) {
+        for (auto &[id, p] : planets) {
+            if (!planets.contains(planetsCount - 1 - id)) {
+                planets[planetsCount - 1 - id] = p;
+                planets[planetsCount - 1 - id].clear();
+            }
         }
     }
     for (auto &g : flyingWorkerGroups) {
         auto normalize = [this, &coord_to_planet](int &id) {
             if (planets.contains(id))
                 return;
-            else if (planetsCount > 0 && planets.contains(planetsCount - 1 - id))
-                id = max_planet_index - (planetsCount - 1 - id);
             else
                 id = -1;
         };
