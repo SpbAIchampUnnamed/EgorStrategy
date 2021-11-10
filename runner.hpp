@@ -37,7 +37,7 @@ public:
         while (true) {
             auto message = codegame::ServerMessage::readFrom(tcpStream);
             if (auto getActionMessage = std::dynamic_pointer_cast<codegame::ServerMessage::GetAction>(message)) {
-                model::game = getActionMessage->playerView;
+                model::game.extend(std::move(getActionMessage->playerView));
                 return;
             } else if (auto finishMessage = std::dynamic_pointer_cast<codegame::ServerMessage::Finish>(message)) {
                 exit(0);

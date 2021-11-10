@@ -74,7 +74,7 @@ int getMyRobotsOnPlanet(int planet) {
 
 int getPlayersRobotsCount(int player) {
     int ans = getPlayersRobotsInGroups(player, game.flyingWorkerGroups);
-    for (size_t i = 0; i < game.planets.size(); ++i)
+    for (auto i : views::keys(game.planets))
         ans += getPlayersRobotsOnPlanet(player, i);
     return ans;
 }
@@ -89,6 +89,18 @@ int getMyTeamRobotsCount() {
         auto &p = game.players[i];
         if (p.teamIndex == game.players[game.myIndex].teamIndex) {
             ans += getPlayersRobotsCount(i);
+        }
+    }
+    return ans;
+}
+
+
+int getMyTeamRobotsOnPlanet(int planet) {
+    int ans = 0;
+    for (size_t i = 0; i < game.players.size(); ++i) {
+        auto &p = game.players[i];
+        if (p.teamIndex == game.players[game.myIndex].teamIndex) {
+            ans += getPlayersRobotsOnPlanet(i, planet);
         }
     }
     return ans;

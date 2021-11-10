@@ -7,6 +7,7 @@
 #include "building_scheme_optimization.hpp"
 #include "statistics.hpp"
 #include "mincost.hpp"
+#include "exploration.hpp"
 #include "utils/reduce.hpp"
 #include "coro/safe_lambda.hpp"
 #include "const.hpp"
@@ -261,6 +262,19 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     ActionController controller(dispatcher);
 
     co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
+
+    {
+        vector<Task<void>> explorers;
+        for (auto spec : EnumValues<Specialty>::list) {
+            int start = (int) spec;
+            for (int i = 0; i < 3; ++i) {
+                explorers.emplace_back(explore(controller, start, spec).start());
+            }
+        }
+        for (auto t : explorers) {
+            co_await t;
+        }
+    }
 
     // auto start_time = clock();
 

@@ -13,5 +13,6 @@ int getMyRobotsCount();
 int getMyTeamRobotsCount();
 int getPlayersRobotsOnPlanet(int player, int planet);
 int getMyRobotsOnPlanet(int planet);
+int getMyTeamRobotsOnPlanet(int planet);
 
 #endif
