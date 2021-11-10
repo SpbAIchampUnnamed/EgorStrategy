@@ -14,7 +14,10 @@ using namespace model;
 
 BuildingScheme getInitialScheme() {
     auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
-        return p.workerGroups.size() && game.players[p.workerGroups[0].playerIndex].teamIndex == game.players[game.myIndex].teamIndex;
+        return p.workerGroups.size() > 0
+            && game.players[p.workerGroups[0].playerIndex].teamIndex == game.players[game.myIndex].teamIndex
+            && p.building
+            && p.building->buildingType == BuildingType::QUARRY;
     })).id;
     int my_robots = getMyTeamRobotsCount();
     cerr << my_robots << "\n";

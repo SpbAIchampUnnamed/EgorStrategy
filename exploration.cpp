@@ -24,14 +24,14 @@ coro::Task<void> explore(ActionController &controller, int from, model::Specialt
         if (it == precalc::near_planets[from].end()) {
             break;
         } else {
-            int p = *it;
+            int p;
+            if (spec == model::Specialty::LOGISTICS) {
+                p = precalc::logist_prev[*it][from];
+            } else {
+                p = precalc::regular_prev[*it][from];
+            }
             used[p] = 1;
-            if (spec == precalc::my_specialty)
-                co_await controller.move(from, p, 1).start();
-            else if (spec == model::Specialty::LOGISTICS)
-                co_await controller.dispatcher.wait(precalc::logist_real_distance(from, p), constants::exploration_prior);
-            else
-                co_await controller.dispatcher.wait(precalc::regular_real_distance(from, p), constants::exploration_prior);
+            co_await controller.move(from, p, 1).start();
             from = p;
         }
     }

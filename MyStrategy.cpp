@@ -258,8 +258,14 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
     co_await balance_task;
 }
 
-Task<void> main_coro(Dispatcher &dispatcher) {
-    ActionController controller(dispatcher);
+Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &dispatchers) {
+    auto &dispatcher = dispatchers[(int) precalc::my_specialty];
+
+    auto controllers = [&]<size_t... i>(index_sequence<i...>) {
+        return array{ActionController(dispatchers[i], i)...};
+    }(make_index_sequence<EnumValues<Specialty>::list.size()> {});
+
+    auto &controller = controllers[(int) precalc::my_specialty];
 
     co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
 
@@ -268,7 +274,7 @@ Task<void> main_coro(Dispatcher &dispatcher) {
         for (auto spec : EnumValues<Specialty>::list) {
             int start = (int) spec;
             for (int i = 0; i < 3; ++i) {
-                explorers.emplace_back(explore(controller, start, spec).start());
+                explorers.emplace_back(explore(controllers[(int) spec], start, spec).start());
             }
         }
         for (auto t : explorers) {
@@ -303,7 +309,10 @@ Task<void> main_coro(Dispatcher &dispatcher) {
     // }
 
     auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
-        return p.workerGroups.size() && p.workerGroups[0].playerIndex == game.myIndex;
+        return p.workerGroups.size() > 0
+            && p.workerGroups[0].playerIndex == game.myIndex
+            && p.building
+            && p.building->buildingType == BuildingType::QUARRY;
     })).id;
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
@@ -1067,16 +1076,19 @@ void MyStrategy::play(Runner &runner)
     precalc::prepare();
 
     TaskQueue queue;
-    Action act;
-    Dispatcher dispatcher(queue, act);
+    array<Action, EnumValues<Specialty>::list.size()> acts;
+    auto dispatchers = [&]<size_t... i>(index_sequence<i...>) {
+        return array{Dispatcher(queue, acts[i])...};
+    }(make_index_sequence<EnumValues<Specialty>::list.size()>{});
 
-    main_coro(dispatcher).start();
+    main_coro(dispatchers).start();
 
     while (!queue.empty()) {
         while (queue.top().tick > game.currentTick) {
-            runner.update(act);
+            runner.update(acts[(int) precalc::my_specialty]);
             precalc::prepare();
-            act.clear();
+            for (auto &act : acts)
+                act.clear();
         }
         auto h = queue.top().handle;
         queue.pop();
