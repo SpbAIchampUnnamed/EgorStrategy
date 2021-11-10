@@ -419,7 +419,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         }
         auto generate_custom_distribution = [&] (int speciality) {
             int stone_used = 0;
-            for (auto i : views::keys(game.planets)) {
+            for (size_t i = 0; i < near_planets[speciality].size(); ++i) {
                 if (planned[near_planets[speciality][i]] != nullopt && !used[near_planets[speciality][i]]) {
                     int planet_index = near_planets[speciality][i];
                     used[planet_index] = true;
