@@ -316,6 +316,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             && p.building->buildingType == BuildingType::QUARRY;
     })).id;
 
+    int monitors = 0;
     {
         array<bool, max_planet_index + 1> used{};
         auto fill_used = [&](int i) {
@@ -333,6 +334,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             if (!used[i]) {
                 monitor_planet(controllers[(int) Specialty::LOGISTICS], (int) Specialty::LOGISTICS, i).start();
                 fill_used(i);
+                ++monitors;
             }
         }
     }
@@ -627,6 +629,8 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     robots[(int) *p.specialty] = getPlayersRobotsCount(i);
                 }
             }
+            
+            robots[(int) Specialty::LOGISTICS] = max(robots[(int) Specialty::LOGISTICS] - monitors, 0);
 
             // Use combat robots for interception
             // for (auto &g : game.flyingWorkerGroups) {
