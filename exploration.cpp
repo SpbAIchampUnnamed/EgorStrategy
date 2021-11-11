@@ -12,7 +12,7 @@ bool used[model::max_planet_index + 1] = {};
 };
 
 coro::Task<void> explore(ActionController &controller, int from, model::Specialty spec) {
-    while (1) {
+    while (model::game.planetsCount < 0 || model::game.planets.size() < (size_t) model::game.planetsCount) {
         auto it = std::ranges::find_if(precalc::near_planets[from], [](int p) {
             if (used[p]) {
                 return false;

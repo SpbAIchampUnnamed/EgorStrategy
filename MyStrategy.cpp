@@ -8,6 +8,7 @@
 #include "statistics.hpp"
 #include "mincost.hpp"
 #include "exploration.hpp"
+#include "monitoring.hpp"
 #include "utils/reduce.hpp"
 #include "coro/safe_lambda.hpp"
 #include "const.hpp"
@@ -314,6 +315,27 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             && p.building
             && p.building->buildingType == BuildingType::QUARRY;
     })).id;
+
+    {
+        array<bool, max_planet_index + 1> used{};
+        auto fill_used = [&](int i) {
+            int x = game.planets[i].x;
+            int y = game.planets[i].y;
+            for (auto &p : views::values(game.planets)) {
+                if (abs(p.x - x) + abs(p.y - y) <= *game.viewDistance) {
+                    used[p.id] = 1;
+                }
+            }
+        };
+        for (auto p : views::keys(distribution))
+            fill_used(p);
+        for (auto i : views::keys(game.planets)) {
+            if (!used[i]) {
+                monitor_planet(controllers[(int) Specialty::LOGISTICS], (int) Specialty::LOGISTICS, i).start();
+                fill_used(i);
+            }
+        }
+    }
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
         // auto &a_bp = game.buildingProperties.at(a.second);
