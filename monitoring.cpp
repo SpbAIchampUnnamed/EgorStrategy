@@ -12,7 +12,10 @@ coro::Task<void> monitor_planet(ActionController &controller, int from, int plan
     ASSERT(game.players[controller.playerId].specialty == Specialty::LOGISTICS);
     while (1) {
         bool under_attack = 0;
-        for (auto &g : game.flyingWorkerGroups) {
+        auto enemy_groups = game.flyingWorkerGroups | views::filter([](auto &g) {
+            return game.players[g.playerIndex].teamIndex != game.players[game.myIndex].teamIndex;
+        });
+        for (auto &g : enemy_groups) {
             if (g.targetPlanet == from && g.nextPlanetArrivalTick == game.currentTick + 1) {
                 under_attack = 1;
                 break;
@@ -36,7 +39,7 @@ coro::Task<void> monitor_planet(ActionController &controller, int from, int plan
                         continue;
                     }
                     int arrival_tick = game.currentTick + logist_real_distance(from, x);
-                    for (auto &g : game.flyingWorkerGroups) {
+                    for (auto &g : enemy_groups) {
                         if (g.targetPlanet == x && g.nextPlanetArrivalTick <= arrival_tick) {
                             safe = 0;
                             break;

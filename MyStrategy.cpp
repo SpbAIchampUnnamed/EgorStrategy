@@ -629,7 +629,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     robots[(int) *p.specialty] = getPlayersRobotsCount(i);
                 }
             }
-            
+
             robots[(int) Specialty::LOGISTICS] = max(robots[(int) Specialty::LOGISTICS] - monitors, 0);
 
             // Use combat robots for interception
