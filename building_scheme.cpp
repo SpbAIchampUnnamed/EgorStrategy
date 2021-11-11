@@ -145,12 +145,13 @@ BuildingScheme getInitialScheme() {
         };
         vector<pair<int, BuildingScheme>> schemes;
         for (auto i : views::keys(game.planets)) {
-            if (game.planets[i].workerGroups.size())
-                continue;
             schemes.emplace_back();
             auto &[cost, smul, distribution, transfers] = schemes.back().second;
             smul = mul;
-            auto planets_view = views::values(game.planets);
+            constexpr int START_PLANETS = 3;
+            auto planets_view = views::values(game.planets) | views::filter([](auto &p) {
+                return p.id >= START_PLANETS && p.id < game.planetsCount - START_PLANETS;
+            });
             vector<Planet> planets(planets_view.begin(), planets_view.end());
             sort(planets.begin(), planets.end(), [i](auto &a, auto &b) {
                 if (precalc::logist_d[i][a.id] != precalc::logist_d[i][b.id])
@@ -160,7 +161,7 @@ BuildingScheme getInitialScheme() {
             });
             for (auto type : buildings) {
                 auto criterium = [type, start_planet](auto &p)->bool {
-                    if (p.id < 0 || p.workerGroups.size())
+                    if (p.id < 0)
                         return 0;
                     if (game.buildingProperties.at(type).harvest)
                         return p.harvestableResource == game.buildingProperties.at(type).produceResource;
@@ -314,7 +315,7 @@ BuildingScheme getInitialScheme() {
             dist += precalc::logist_d[0][p];
             dist += precalc::regular_d[1][p];
             dist += precalc::regular_d[2][p];
-            p = max_planet_index - p;
+            p = game.planetsCount - 1 - p;
             alt_dist += precalc::logist_d[0][p];
             alt_dist += precalc::regular_d[1][p];
             alt_dist += precalc::regular_d[2][p];
@@ -322,11 +323,11 @@ BuildingScheme getInitialScheme() {
         cerr << dist << " vs " << alt_dist << "\n";
         if (alt_dist < dist) {
             for (auto &[p, _] : best_scheme.distribution) {
-                p = max_planet_index - p;
+                p = game.planetsCount - 1 - p;
             }
             for (auto &[from, to, cnt, res] : best_scheme.transfers) {
-                from = max_planet_index - from;
-                to = max_planet_index - to;
+                from = game.planetsCount - 1 - from;
+                to = game.planetsCount - 1 - to;
             }
         }
         cerr << "total_robots = " << robots << " + " << best_scheme.cost << " = " << robots + best_scheme.cost << "\n";
@@ -346,6 +347,9 @@ BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
     vector <optional<BuildingType>> planet_building(max_planet_index + 1, nullopt);
     for (auto &[planet_index, building]: new_building_scheme.distribution) {
         planet_building[planet_index] = building;
+    }
+    for (int i = 0; i < 3; ++i) {
+        planet_building[i] = BuildingType::QUARRY;
     }
     for (auto loop = 0; loop < 10; loop++) {
         for (auto distribution = building_scheme.distribution; auto &[planet_index, building] : distribution) {
