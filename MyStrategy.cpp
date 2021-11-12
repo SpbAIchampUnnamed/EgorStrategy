@@ -511,7 +511,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                                         }
                                         co_await dispatcher.doAndWait(act, 0, constants::move_reserve_prior);
                                         int time = ceil(Fraction(game.planets[p].building->health, cnt));
-                                        if (!co_await controller.waitWithPrior(p, cnt, time, prior).start()) {
+                                        if (!co_await controller.waitWithPrior(p, cnt, time, constants::repair_prior + 1).start()) {
                                             stone_required += cnt;
                                             need_robots += cnt;
                                             --runing_tasks;
@@ -521,7 +521,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                                     act.buildings = {BuildingAction(p, type)};
                                     int time = ceil(Fraction(game.buildingProperties.at(type).maxHealth, cnt));
                                     co_await dispatcher.doAndWait(act, 0, constants::move_reserve_prior);
-                                    if (!co_await controller.waitWithPrior(p, cnt, time, prior).start()) {
+                                    if (!co_await controller.waitWithPrior(p, cnt, time, constants::repair_prior + 1).start()) {
                                         stone_required += cnt;
                                         need_robots += cnt;
                                         --runing_tasks;
