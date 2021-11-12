@@ -30,10 +30,16 @@ coro::Task<void> explore(ActionController &controller, int from, model::Specialt
             } else {
                 p = precalc::regular_prev[*it][from];
             }
+            if (p < 0) {
+                if (!co_await controller.waitWithPrior(from, 1, 1, constants::exploration_prior).start())
+                    break;
+                continue;
+            }
             used[p] = 1;
             if (!co_await controller.move(from, p, 1).start()) {
                 break;
             }
+            co_await controller.dispatcher.wait(0, constants::exploration_prior);
             from = p;
         }
     }
