@@ -633,6 +633,10 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
             robots[(int) Specialty::LOGISTICS] = max(robots[(int) Specialty::LOGISTICS] - monitors, 0);
 
+            int organics_def = min(500, robots[(int) Specialty::COMBAT]);
+
+            robots[(int) Specialty::COMBAT] -= organics_def;
+
             // Use combat robots for interception
             // for (auto &g : game.flyingWorkerGroups) {
             //     if (g.playerIndex != game.myIndex) {
@@ -652,6 +656,9 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             }) | views::transform([&](size_t i) -> auto& {
                 return scheme.transfers[i];
             });
+
+            int organics = ranges::find(views::values(distribution), BuildingType::FARM).base() - distribution.begin();
+            scheme.static_robots[organics][(int) Specialty::COMBAT] += organics_def;
 
             for (auto &x : scheme.transfers) {
                 x.count.round_to_denom(constants::max_valid_flow_denom);
@@ -734,16 +741,16 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 pre_static_robots[p].round_to_denom(constants::max_valid_flow_denom);
             }
 
-            for (auto [p, type] : distribution) {
-                auto &bp = game.buildingProperties.at(type);
-                if (bp.produceResource) {
-                    Fraction extra_prodict(game.planets[p].resources[*bp.produceResource], constants::product_planing_horizon);
-                    pre_static_robots[p] -= extra_prodict / bp.produceAmount * bp.workAmount;
-                    if (pre_static_robots[p] < 0) {
-                        pre_static_robots[p] = 0;
-                    }
-                }
-            }
+            // for (auto [p, type] : distribution) {
+            //     auto &bp = game.buildingProperties.at(type);
+            //     if (bp.produceResource) {
+            //         Fraction extra_prodict(game.planets[p].resources[*bp.produceResource], constants::product_planing_horizon);
+            //         pre_static_robots[p] -= extra_prodict / bp.produceAmount * bp.workAmount;
+            //         if (pre_static_robots[p] < 0) {
+            //             pre_static_robots[p] = 0;
+            //         }
+            //     }
+            // }
             ranges::transform(pre_static_robots, static_robots.begin(), [](auto &x) { return ceil(x); });
 
             set<BuildingType> full;
