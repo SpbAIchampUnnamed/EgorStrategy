@@ -263,7 +263,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
     auto &dispatcher = dispatchers[(int) precalc::my_specialty];
 
     auto controllers = [&]<size_t... i>(index_sequence<i...>) {
-        return array{ActionController(dispatchers[i], i)...};
+        return array{ActionController(dispatchers[i], game.planets[i].workerGroups[0].playerIndex)...};
     }(make_index_sequence<EnumValues<Specialty>::list.size()> {});
 
     auto &controller = controllers[(int) precalc::my_specialty];
@@ -337,6 +337,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 ++monitors;
             }
         }
+        cerr << monitors << " monitors starts\n";
     }
 
     ranges::sort(distribution, [start_planet](auto &a, auto &b) {
