@@ -9,6 +9,7 @@
 #include "mincost.hpp"
 #include "exploration.hpp"
 #include "monitoring.hpp"
+#include "danger_analysis.hpp"
 #include "utils/reduce.hpp"
 #include "coro/safe_lambda.hpp"
 #include "const.hpp"
@@ -593,6 +594,76 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 co_await dispatcher.wait(1, constants::repair_prior);
         }
     }).start());
+
+    make_coro([&](auto self) -> Task<void> {
+        while (1) {
+            vector<int> my_planets(distribution.size());
+            ranges::copy(views::keys(distribution), my_planets.begin());
+            vector<int> enemy_planets;
+            for (auto &p : views::values(game.planets)) {
+                if (p.building) {
+                    enemy_planets.emplace_back(p.id);
+                }
+            }
+            ranges::sort(enemy_planets);
+            for (auto p : views::keys(distribution)) {
+                auto it = ranges::lower_bound(enemy_planets, p);
+                if (it != enemy_planets.end()) {
+                    if (it == std::prev(enemy_planets.end())) {
+                        enemy_planets.pop_back();
+                    } else {
+                        *it = *next(it);
+                    }
+                }
+            }
+            enemy_planets.erase(ranges::unique(enemy_planets).begin(), enemy_planets.end());
+            vector<EnemyGroup> groups;
+            for (auto &g : game.flyingWorkerGroups) {
+                if (game.players[g.playerIndex].teamIndex != game.players[game.myIndex].teamIndex &&
+                    !ranges::binary_search(enemy_planets, g.targetPlanet))
+                {
+                    groups.emplace_back(EnemyGroup{
+                        .count = g.number,
+                        .planet = g.targetPlanet,
+                        .distToPlanet = g.nextPlanetArrivalTick,
+                        .specialty = *game.players[g.playerIndex].specialty,
+                        .prevPlanet = g.departurePlanet
+                    });
+                }
+            }
+            auto static_groups = game.planets | views::values | views::transform([](const auto &p) {
+                return p.workerGroups | views::transform([&](auto &g) {
+                    return tie(p.id, g);
+                });
+            }) | views::join;
+            for (auto &&[p, g] : static_groups) {
+                if (game.players[g.playerIndex].teamIndex != game.players[game.myIndex].teamIndex &&
+                    !ranges::binary_search(enemy_planets, p))
+                {
+                    groups.emplace_back(EnemyGroup{
+                        .count = g.number,
+                        .planet = p,
+                        .distToPlanet = 0,
+                        .specialty = *game.players[g.playerIndex].specialty,
+                        .prevPlanet = p
+                    });
+                }
+            }
+            auto attacks = getDangerousZones(my_planets, groups);
+            int sum = 0;
+            for (size_t i = 0; i < attacks.size(); ++i){
+                auto &v = attacks[i];
+                for (auto [gn, d] : v) {
+                    auto &g = groups[gn];
+                    sum += g.count;
+                    cerr << "Attack: " << g.count << " from " << g.planet << " to " << my_planets[i];
+                    cerr << " on tick " << game.currentTick << "\n";
+                }
+            }
+            cerr << "Sum attack: " << sum << " on tick " << game.currentTick << "\n";
+            co_await dispatcher.wait(1, constants::static_robots_recalc_prior + 1);
+        }
+    }).start();
 
     int batching_factor = 1;
     vector<int> static_robots(max_planet_index + 1);

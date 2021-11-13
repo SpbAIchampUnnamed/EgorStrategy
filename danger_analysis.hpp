@@ -11,6 +11,7 @@ struct EnemyGroup {
     int planet;
     int distToPlanet;
     model::Specialty specialty;
+    int prevPlanet;
 };
 
 std::vector<std::vector<std::pair<int, int>>> getDangerousZones(const std::vector<int> &my_planets, const std::vector<EnemyGroup> &groups);
