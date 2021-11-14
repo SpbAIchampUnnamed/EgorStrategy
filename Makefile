@@ -14,7 +14,7 @@ ifeq ($(BUILDTYPE), profile)
 	CXXFLAGS=$(BASECXXFLAGS) -Og -g -DLOCAL -march=native
 endif
 VPATH = . model codegame debugging utils coro
-CXX=g++-11
+CXX=g++
 SRC=$(foreach dir,$(VPATH),$(wildcard $(dir)/*.cpp))
 OBJS=$(foreach file,$(SRC),$(BUILDTYPE)/$(subst .cpp,.o,$(file)))
 
