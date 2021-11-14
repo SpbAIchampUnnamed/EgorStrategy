@@ -9,6 +9,7 @@
 #include "mincost.hpp"
 #include "exploration.hpp"
 #include "monitoring.hpp"
+#include "def.hpp"
 #include "danger_analysis.hpp"
 #include "utils/reduce.hpp"
 #include "coro/safe_lambda.hpp"
@@ -668,6 +669,10 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
     int batching_factor = 1;
     vector<int> static_robots(max_planet_index + 1);
     vector<Fraction<long long>> flow;
+
+    make_coro([&](auto self) -> Task<void> {
+        
+    }).start();
 
     make_coro([&](auto self) -> Task<void> {    
         vector<Fraction<long long>> pre_static_robots(max_planet_index + 1);
