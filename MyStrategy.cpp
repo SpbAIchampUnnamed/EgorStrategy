@@ -262,15 +262,12 @@ Task<void> harvest_coro(Dispatcher &dispatcher, int start_planet) {
 }
 
 Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &dispatchers) {
-    auto &dispatcher = dispatchers[(int) precalc::my_specialty];
-
     auto controllers = [&]<size_t... i>(index_sequence<i...>) {
         return array{ActionController(dispatchers[i], game.planets[i].workerGroups[0].playerIndex)...};
     }(make_index_sequence<EnumValues<Specialty>::list.size()> {});
 
-    auto &controller = controllers[(int) precalc::my_specialty];
-
-    co_await dispatcher.doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
+    co_await dispatchers[(int) precalc::my_specialty]
+        .doAndWait(Action({}, {}, precalc::my_specialty), 0, numeric_limits<int>::max());
 
     {
         vector<Task<void>> explorers;
@@ -285,38 +282,21 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         }
     }
 
-    // auto start_time = clock();
+    auto [cost, best_mul, common_distribution, _] = getInitialScheme();
 
-    auto [cost, best_mul, distribution, _] = getInitialScheme();
+    array<int, EnumValues<Specialty>::list.size()> start_planets{0, 1, 2};
 
-    // {
-    //     int robots = getMyRobotsCount();
-    //     auto prod = getTransfersByDistribution<Fraction<long long>>(distribution, robots).first;
-    //     cerr << "prod = " << prod << "\n";
-    //     for (int i = 0; i < 100 && clock() - start_time < CLOCKS_PER_SEC * 0.6; ++i) {
-    //         int x = rnd() % distribution.size();
-    //         int y = x;
-    //         while (y == x)
-    //             y = rnd() % distribution.size();
-    //         swap(distribution[x].second, distribution[y].second);
-    //         auto new_prod = getTransfersByDistribution<Fraction<long long>>(distribution, robots).first;
-    //         if (new_prod > prod) {
-    //             i = 0;
-    //             prod = new_prod;
-    //             cerr << "new prod = " << prod << "\n";
-    //         } else {
-    //             swap(distribution[x].second, distribution[y].second);
-    //         }
-    //     }
-    //     cerr << "Optimize end\n";
-    // }
-
-    auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
-        return p.workerGroups.size() > 0
-            && p.workerGroups[0].playerIndex == game.myIndex
-            && p.building
-            && p.building->buildingType == BuildingType::QUARRY;
-    })).id;
+    #ifdef LOCAL
+    {
+        auto start_planet = (*ranges::find_if(views::values(game.planets), [](auto &p) {
+            return p.workerGroups.size() > 0
+                && p.workerGroups[0].playerIndex == game.myIndex
+                && p.building
+                && p.building->buildingType == BuildingType::QUARRY;
+        })).id;
+        ASSERT(start_planet == start_planets[(int) precalc::my_specialty]);
+    }
+    #endif
 
     int monitors = 0;
     {
@@ -342,97 +322,86 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         cerr << monitors << " monitors starts\n";
     }
 
-    ranges::sort(distribution, [start_planet](auto &a, auto &b) {
-        // auto &a_bp = game.buildingProperties.at(a.second);
-        // auto &b_bp = game.buildingProperties.at(b.second);
-        // if (a_bp.harvest != b_bp.harvest)
-        //     return pair(a_bp.harvest, a.first) > pair(b_bp.harvest, b.first);
-        // if (a_bp.harvest)
-        //     return pair(a_bp.produceScore, a.first) > pair(b_bp.produceScore, b.first);
-        return pair(precalc::d[a.first][start_planet], a.first) < pair(precalc::d[b.first][start_planet], b.first);
-    });
+    auto distributions = [&]<size_t... i>(index_sequence<i...>) {
+        return array{(i, common_distribution)...};
+    }(make_index_sequence<EnumValues<Specialty>::list.size()>{});
+
+    for (auto spec : EnumValues<Specialty>::list) {
+        auto &distribution = distributions[(int) spec];
+        auto start_planet = start_planets[(int) spec];
+        ranges::sort(distribution, [start_planet, &d=precalc::get_spec_d(spec)](auto &a, auto &b) {
+            return pair(d[a.first][start_planet], a.first) < pair(d[b.first][start_planet], b.first);
+        });
+    }
+
+    for (auto spec : EnumValues<Specialty>::list) {
+        make_coro([&, &controller = controllers[(int) spec]](auto self) -> Task<void> {
+            int maxWorkers = game.buildingProperties.at(BuildingType::QUARRY).maxWorkers;
+            int reserved = 0;
+            vector<int> indx;
+            ranges::copy(views::values(game.planets) | views::filter([](auto &p) {
+                return !p.building || p.building->buildingType != BuildingType::QUARRY;
+            }) | views::transform([](auto &p) {
+                return p.id;
+            }), back_inserter(indx));
+            auto &d = precalc::get_spec_d(spec);
+            ranges::sort(indx, [start_planet](int a, int b) {
+                return pair(d[start_planet][a], a) < pair(d[start_planet][b], b);
+            });
+            while (1) {
+                bool flag = 1;
+                Action act;
+                if (!game.planets[start_planet].building || game.planets[start_planet].building->buildingType != BuildingType::QUARRY) {
+                    if (game.planets[start_planet].building)
+                        act.buildings.emplace_back(start_planet, nullopt);
+                    else
+                        act.buildings.emplace_back(start_planet, BuildingType::QUARRY);
+                }
+
+                if (game.planets[start_planet].resources[Resource::STONE] < constants::stone_reserve_size) {
+                    int c = min(
+                        getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet],
+                        maxWorkers - reserved - controller.onWayTo[start_planet]);
+                    if (c > 0) {
+                        reserved += c;
+                        ASSERT(getMyRobotsOnPlanet(start_planet) >= controller.reservedRobots[start_planet]);
+                    }
+                } else {
+                    reserved = 0;
+                    flag = 0;
+                }
+                if (flag) {
+                    cerr << "Stone reserve, " << game.currentTick << ": " << controller.reservedRobots[start_planet] << " ";
+                    cerr << reserved << " " << controller.onWayTo[start_planet] << "\n";
+                    for (auto i : indx) {
+                        if (game.planets[i].building && game.planets[i].building->buildingType == BuildingType::FARM)
+                            continue;
+                        if (reserved + controller.onWayTo[start_planet] >= maxWorkers)
+                            break;
+                        int c = getMyRobotsOnPlanet(i) - controller.reservedRobots[i];
+                        if (c > 0) {
+                            controller.move(i, start_planet, min(c, maxWorkers - reserved - controller.onWayTo[start_planet])).start();
+                        }
+                    }
+                }
+                co_await dispatcher.doAndWait(act, 0, constants::move_reserve_prior);
+                if (reserved) {
+                    if (!co_await controller.waitWithPrior(start_planet, reserved, 1, constants::stone_reserve_prior).start())
+                        reserved = 0;
+                } else {
+                    co_await dispatcher.wait(1, constants::stone_reserve_prior);
+                }
+            }
+        }).start();
+        
+    }
 
     vector<Transfer> transfers;
     vector<int> transfers_index;
 
-    // auto [prod, transfers] = getTransfersByDistribution<Fraction<long long>>(distribution, getMyRobotsOnPlanet(start_planet));
-
-    // ranges::sort(transfers, [](auto &x, auto &y) {
-    //     if (x.from != y.from)
-    //         return x.from < y.from;
-    //     else
-    //         return x.to < y.to;
-    // });
-
-    // cerr << prod << " robots per tick \n";
-
-    // for (auto [f, t, c, r] : transfers) {
-    //     cerr << f << "\t" << t << "\t" << c << "\t" << (r ? to_string(*r) : "NULL"sv) << "\n";
-    // }
-
-    // cerr << "\n";
-
     vector<Task<void>> tasks;
 
     int stone_required = 0;
-
-    make_coro([&](auto self) -> Task<void> {
-        int maxWorkers = game.buildingProperties.at(BuildingType::QUARRY).maxWorkers;
-        int reserved = 0;
-        vector<int> indx;
-        ranges::copy(views::values(game.planets) | views::filter([](auto &p) {
-            return !p.building || p.building->buildingType != BuildingType::QUARRY;
-        }) | views::transform([](auto &p) {
-            return p.id;
-        }), back_inserter(indx));
-        ranges::sort(indx, [start_planet](int a, int b) {
-            return pair(precalc::d[start_planet][a], a) < pair(precalc::d[start_planet][b], b);
-        });
-        while (1) {
-            bool flag = 1;
-            Action act;
-            if (!game.planets[start_planet].building || game.planets[start_planet].building->buildingType != BuildingType::QUARRY) {
-                if (game.planets[start_planet].building)
-                    act.buildings.emplace_back(start_planet, nullopt);
-                else
-                    act.buildings.emplace_back(start_planet, BuildingType::QUARRY);
-            }
-
-            if (game.planets[start_planet].resources[Resource::STONE] < constants::stone_reserve_size) {
-                int c = min(
-                    getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet],
-                    maxWorkers - reserved - controller.onWayTo[start_planet]);
-                if (c > 0) {
-                    reserved += c;
-                    ASSERT(getMyRobotsOnPlanet(start_planet) >= controller.reservedRobots[start_planet]);
-                }
-            } else {
-                reserved = 0;
-                flag = 0;
-            }
-            if (flag) {
-                cerr << "Stone reserve, " << game.currentTick << ": " << controller.reservedRobots[start_planet] << " ";
-                cerr << reserved << " " << controller.onWayTo[start_planet] << "\n";
-                for (auto i : indx) {
-                    if (game.planets[i].building && game.planets[i].building->buildingType == BuildingType::FARM)
-                        continue;
-                    if (reserved + controller.onWayTo[start_planet] >= maxWorkers)
-                        break;
-                    int c = getMyRobotsOnPlanet(i) - controller.reservedRobots[i];
-                    if (c > 0) {
-                        controller.move(i, start_planet, min(c, maxWorkers - reserved - controller.onWayTo[start_planet])).start();
-                    }
-                }
-            }
-            co_await dispatcher.doAndWait(act, 0, constants::move_reserve_prior);
-            if (reserved) {
-                if (!co_await controller.waitWithPrior(start_planet, reserved, 1, constants::stone_reserve_prior).start())
-                    reserved = 0;
-            } else {
-                co_await dispatcher.wait(1, constants::stone_reserve_prior);
-            }
-        }
-    }).start();
 
     vector<pair<int, BuildingType>> my_distribution(0);
     {

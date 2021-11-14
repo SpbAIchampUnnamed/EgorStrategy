@@ -44,6 +44,27 @@ inline int regular_real_distance(int x, int y) {
     return regular_d[x][y] >> constants::planet_bits;
 }
 
+inline int spec_real_distance(model::Specialty spec, int x, int y) {
+    if (spec == model::Specialty::LOGISTICS)
+        return logist_real_distance(x, y);
+    else
+        return regular_real_distance(x, y);
+}
+
+inline auto &get_spec_d(model::Specialty spec) {
+    if (spec == model::Specialty::LOGISTICS)
+        return logist_d;
+    else
+        return regular_d;
+}
+
+inline auto &get_spec_prev(model::Specialty spec) {
+    if (spec == model::Specialty::LOGISTICS)
+        return logist_prev;
+    else
+        return regular_prev;
+}
+
 };
 
 #endif
