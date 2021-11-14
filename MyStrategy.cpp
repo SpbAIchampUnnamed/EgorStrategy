@@ -626,6 +626,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
     array<vector<Fraction<long long>>, EnumValues<Specialty>::list.size()> spec_flow;
 
     for (auto spec: EnumValues<Specialty>::list) {
+        spec_batching_factor[(int) spec] = 1;
         spec_static_robots[(int) spec].resize(max_planet_index + 1);
     }
 

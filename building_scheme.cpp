@@ -359,7 +359,7 @@ BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
                 building == BuildingType::FARM) {
                 continue;
             }
-            for (auto new_planet_index_find = 0; new_planet_index_find < 30; new_planet_index_find++) {
+            for (auto new_planet_index_find = 0; new_planet_index_find < game.planets.size(); new_planet_index_find++) {
                 int new_planet_index = precalc::near_planets[planet_index][new_planet_index_find];
                 if (planet_building[new_planet_index] == BuildingType::MINES ||
                     planet_building[new_planet_index] == BuildingType::CAREER ||
@@ -392,8 +392,8 @@ BuildingScheme improveBuildingScheme(BuildingScheme &building_scheme) {
 double estimateBuildingScheme(BuildingScheme &building_scheme) {
     double value = 0;
     for (Transfer &transfer: building_scheme.transfers) {
-        value += (1.0 / 3) * precalc::regular_real_distance(transfer.from, transfer.to) * transfer.count.num;
-        value += (2.0 / 3) * precalc::logist_real_distance(transfer.from, transfer.to) * transfer.count.num;
+        value += (2.0 / 3) * precalc::regular_real_distance(transfer.from, transfer.to) * transfer.count.num;
+        value += (1.5 / 3) * precalc::logist_real_distance(transfer.from, transfer.to) * transfer.count.num;
     }
 //    for (auto &p1: building_scheme.distribution) {
 //        for (auto &p2: building_scheme.distribution) {
