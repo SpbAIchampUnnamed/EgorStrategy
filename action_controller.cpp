@@ -10,12 +10,12 @@ using namespace model;
 
 coro::Task<bool> ActionController::waitWithPrior(int planet, int count, int ticks, int prior) {
     while (ticks--) {
-        if (getMyRobotsOnPlanet(planet) - reservedRobots[planet] < count)
+        if (getPlayersRobotsOnPlanet(playerId, planet) - reservedRobots[planet] < count)
             co_return false;
         reservedRobots[planet] += count;
         co_await dispatcher.wait(0, constants::move_unreserve_prior);
         reservedRobots[planet] -= count;
         co_await dispatcher.wait(1, prior);
     }
-    co_return getMyRobotsOnPlanet(planet) - reservedRobots[planet] >= count;
+    co_return getPlayersRobotsOnPlanet(playerId, planet) - reservedRobots[planet] >= count;
 }

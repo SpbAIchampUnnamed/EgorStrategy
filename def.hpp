@@ -40,7 +40,7 @@ C Для каждой группы врагов переменную mx_i — с
 [eps] - странная поебень
 */
 template<class CalcType>
-void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
+int setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
     const std::vector<EnemyGroup> &groups,
     const std::vector<int> &my_planets,
     const std::vector<std::pair<int, int>> &free_robots,
@@ -56,9 +56,9 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
 
     int d_size = 0;
     vector<int> targets(groups.size(), 0);
-    for(int i = 0; i < planets.size(); i++)
+    for(int i = 0; i < (int) planets.size(); i++)
     {
-        auto planet = planets[i];
+        auto &planet = planets[i];
 
         d_size += planet.size();
 
@@ -66,6 +66,10 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
         {
             targets[g.first]++;
         }
+    }
+
+    if (d_size == 0) {
+        return 0;
     }
 
     //f_i_j
@@ -86,8 +90,8 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
     int var_cnt = s_size + f_size + d_size + mx_size;
     int ind_d = 0;
     int ind_f = d_size;
-    int ind_s = ind_f + s_size;
-    int ind_mx = ind_s + mx_size;
+    int ind_s = ind_f + f_size;
+    int ind_mx = ind_s + s_size;
     simplex_method::Solver<CalcType> solver(var_cnt);
 
     /*ОГРАНИЧЕНИЯ*/
@@ -97,7 +101,7 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
     //i - our planet
     //j - targeted planet
 
-    for(int p = 0; p < free_robots.size(); p++)
+    for(int p = 0; p < (int) free_robots.size(); p++)
     {
         vector<CalcType> coefs(var_cnt, 0);
 
@@ -109,17 +113,17 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
 
         int index = p * planets.size();
 
-        for(int i = 0; i < planets.size(); i++)
+        for(int i = 0; i < (int) planets.size(); i++)
         {
             coefs[index + i] = 1;
         }
 
-        solver.addLeConstraint(coefs, robots);
+        solver.addLeConstraint(move(coefs), robots);
     }
 
     //C
     int index_tmp = 0;
-    for(int i = 0; i < groups.size(); i++)
+    for(int i = 0; i < (int) groups.size(); i++)
     {
         vector<CalcType> coefs(var_cnt, 0);
 
@@ -132,14 +136,16 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
 
         int count = groups[i].count;
 
-        solver.addGeConstraint(coefs, count * targets[i]);
+        solver.addGeConstraint(move(coefs), count * targets[i]);
 
         index_tmp += targets[i];
     }
 
     //A
 
-    for(int j = 0; j < planets.size(); j++)
+    int constraints = 0;
+
+    for(int j = 0; j < (int) planets.size(); j++)
     {
         vector<CalcType> coefs(var_cnt, 0);
 
@@ -153,8 +159,9 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
             return a.second > b.second;
         });
 
-        for(int i = 0; i < p.size(); i++)
+        for(int i = 0; i < (int) p.size() && constraints < 150; i++)
         {
+            ++constraints;
             int groupId = p[i].first;
 
             int delta = 0;
@@ -178,20 +185,20 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
 
             coefs[ind_d + delta + delta2] = -1;
             
-            for(int s = 0; s < free_robots.size(); s++)
+            for(int s = 0; s < (int) free_robots.size(); s++)
             {
                 auto free_group = free_robots[s];
                 int sp_real_id = my_planets[free_group.first];
-                if(precalc::real_distance(tp_real_id, sp_real_id) < p[i].second)
+                if(precalc::regular_real_distance(tp_real_id, sp_real_id) < p[i].second)
                 {
                     coefs[ind_s + s] = 1;
                 }
             }
-            for(int f = 0; f < free_robots.size(); f++)
+            for(int f = 0; f < (int) free_robots.size(); f++)
             {
                 auto free_group = free_robots[f];
                 int sp_real_id = my_planets[free_group.first];
-                if(precalc::real_distance(tp_real_id, sp_real_id) <= p[i].second)
+                if(precalc::regular_real_distance(tp_real_id, sp_real_id) <= p[i].second)
                 {
                     coefs[ind_f + f * planets.size() + j] = 1;
                 }
@@ -204,20 +211,30 @@ void setDefence(std::vector<std::vector<std::pair<int, int>>> &planets,
     /*РЕШЕНИЕ*/
 
     vector<CalcType> target_coefs(var_cnt, 0);
-    for(int i = 0; i < groups.size(); i++)
+    for(int i = 0; i < (int) groups.size(); i++)
     {
         target_coefs[ind_mx + i] = 1;
     }
 
     auto [t, ans] = solver.template solve<simplex_method::SolutionType::minimize>(move(target_coefs), eps);
 
-    for(int i = 0; i < free_robots.size(); i++)
+    int sum = 0;
+
+    for(int i = 0; i < (int) free_robots.size(); i++)
     {
-        for(int j = 0; j < planets.size(); j++)
+        for(int j = 0; j < (int) planets.size(); j++)
         {
             int start_planet_real_Id = my_planets[free_robots[i].first];
             int end_planet_real_Id = my_planets[j];
-            ac.move(start_planet_real_Id, end_planet_real_Id, t[ind_f + i * planets.size() + j]).start();
+            int cnt = std::ceil(t[ind_f + i * planets.size() + j] - eps);
+            sum += cnt;
+            ac.move(start_planet_real_Id, end_planet_real_Id, cnt).start();
         }
     }
+    for (auto i : views::keys(free_robots)) {
+        int cnt = std::ceil(t[ind_s + i] - eps);
+        sum += cnt;
+        ac.waitWithPrior(my_planets[i], cnt, 1, constants::defecnce_prior).start();
+    }
+    return sum;
 }

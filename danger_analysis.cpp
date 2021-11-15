@@ -27,7 +27,7 @@ vector<vector<pair<int, int>>> getDangerousZones(const vector<int> &my_planets, 
             return pair(to, dist(v, to));
         });
         for (size_t j = 0; j < my_planets.size(); ++j) {
-            int p = my_planets[i];
+            int p = my_planets[j];
             if (d[p] == dist(g.planet, p)) {
                 ans[j].emplace_back(i, d[p] + g.distToPlanet);
             }

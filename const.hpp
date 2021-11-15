@@ -13,8 +13,9 @@ namespace constants {
     constexpr int move_reserve_prior = 100'000;
     constexpr int move_unreserve_prior = -100'000;
 
-    constexpr int monitoring_prior= 95'000;
+    constexpr int monitoring_prior = 95'000;
     constexpr int exploration_prior = 90'000;
+    constexpr int counterstrike_prior = 85'000;
     constexpr int stone_reserve_prior = 80'000;
     constexpr int defecnce_prior = 72'500;
     constexpr int static_robots_recalc_prior = 75'000;

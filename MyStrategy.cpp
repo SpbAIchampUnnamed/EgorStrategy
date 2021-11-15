@@ -323,7 +323,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
     }
 
     auto distributions = [&]<size_t... i>(index_sequence<i...>) {
-        return array{(i, common_distribution)...};
+        return array{((void) i, common_distribution)...};
     }(make_index_sequence<EnumValues<Specialty>::list.size()>{});
 
     for (auto spec: EnumValues<Specialty>::list) {
@@ -336,8 +336,9 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
     for (auto spec: EnumValues<Specialty>::list) {
         auto &dispatcher = dispatchers[(int) spec];
-        int start_planet = start_planets[(int) spec];
-        make_coro([&, &controller = controllers[(int) spec]](auto self) -> Task<void> {
+        auto &start_planet = start_planets[(int) spec];
+        auto &controller = controllers[(int) spec];
+        make_coro([&, spec](auto self) -> Task<void> {
             int maxWorkers = game.buildingProperties.at(BuildingType::QUARRY).maxWorkers;
             int reserved = 0;
             vector<int> indx;
@@ -347,7 +348,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 return p.id;
             }), back_inserter(indx));
             auto &d = precalc::get_spec_d(spec);
-            ranges::sort(indx, [start_planet, d](int a, int b) {
+            ranges::sort(indx, [&](int a, int b) {
                 return pair(d[start_planet][a], a) < pair(d[start_planet][b], b);
             });
             while (1) {
@@ -363,11 +364,15 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
                 if (game.planets[start_planet].resources[Resource::STONE] < constants::stone_reserve_size) {
                     int c = min(
-                            getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet],
-                            maxWorkers - reserved - controller.onWayTo[start_planet]);
+                            getPlayersRobotsOnPlanet(controller.playerId, start_planet)
+                            - controller.reservedRobots[start_planet],
+                            maxWorkers - reserved - controller.onWayTo[start_planet]
+                    );
+                    cerr << controller.playerId << " " << start_planet << " " << getPlayersRobotsOnPlanet(controller.playerId, start_planet) << " " << c << "\n";
                     if (c > 0) {
                         reserved += c;
-                        ASSERT(getMyRobotsOnPlanet(start_planet) >= controller.reservedRobots[start_planet]);
+                        ASSERT(getPlayersRobotsOnPlanet(controller.playerId, start_planet)
+                            >= controller.reservedRobots[start_planet]);
                     }
                 } else {
                     reserved = 0;
@@ -382,7 +387,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                             continue;
                         if (reserved + controller.onWayTo[start_planet] >= maxWorkers)
                             break;
-                        int c = getMyRobotsOnPlanet(i) - controller.reservedRobots[i];
+                        int c = getPlayersRobotsOnPlanet(controller.playerId, i) - controller.reservedRobots[i];
                         if (c > 0) {
                             controller.move(i, start_planet,
                                             min(c, maxWorkers - reserved - controller.onWayTo[start_planet])).start();
@@ -413,7 +418,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         auto &tasks = spec_tasks[(int) spec];
 
         auto &dispatcher = dispatchers[(int) spec];
-        auto start_planet = start_planets[(int) spec];
+        auto &start_planet = start_planets[(int) spec];
         auto &controller = controllers[(int) spec];
         auto &stone_required = spec_stone_required[(int) spec];
 
@@ -438,7 +443,8 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                             }
                             int cnt = min(game.planets[start_planet].resources[Resource::STONE]
                                           - controller.reservedResources[start_planet][(int) Resource::STONE],
-                                          getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet]
+                                          getPlayersRobotsOnPlanet(controller.playerId, start_planet)
+                                          - controller.reservedRobots[start_planet]
                             );
                             ASSERT(cnt >= 0);
                             cnt = min(cnt, need_robots);
@@ -500,7 +506,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             while (1) {
                 ASSERT(stone_required >= 0);
                 auto need = [&]() {
-                    return stone_required - (getMyRobotsOnPlanet(start_planet)
+                    return stone_required - (getPlayersRobotsOnPlanet(controller.playerId, start_planet)
                                              - controller.reservedRobots[start_planet]
                                              + controller.onWayTo[start_planet]);
                 };
@@ -514,7 +520,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                             used.emplace(game.planets[i].building->buildingType);
                             continue;
                         }
-                        int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], need());
+                        int c = min(getPlayersRobotsOnPlanet(controller.playerId, i) - controller.reservedRobots[i], need());
                         ASSERT(c >= 0);
                         if (c > 0) {
                             f = 1;
@@ -527,7 +533,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                         for (auto i: views::keys(game.planets)) {
                             if ((int) i == start_planet)
                                 continue;
-                            int c = min(getMyRobotsOnPlanet(i) - controller.reservedRobots[i], need());
+                            int c = min(getPlayersRobotsOnPlanet(controller.playerId, i) - controller.reservedRobots[i], need());
                             ASSERT(c >= 0);
                             if (c > 0) {
                                 f = 1;
@@ -539,7 +545,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     }
                 }
                 int reserved = min(stone_required,
-                                   getMyRobotsOnPlanet(start_planet) - controller.reservedRobots[start_planet]);
+                                   getPlayersRobotsOnPlanet(controller.playerId, start_planet) - controller.reservedRobots[start_planet]);
                 cerr << "reserved = " << reserved << "\n";
                 if (reserved > 0)
                     co_await controller.waitWithPrior(start_planet, reserved, 1, constants::repair_prior).start();
@@ -549,10 +555,59 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         }).start());
     }
 
+    array<int, EnumValues<Specialty>::list.size()> def_robots{};
+
+    make_coro([&](auto self) -> Task<void> {
+        auto distribution = distributions[0];
+        ranges::sort(distribution, [](auto &a, auto &b) {
+            auto [p_a, type_a] = a;
+            auto [p_b, type_b] = b;
+            auto &bpa = game.buildingProperties.at(type_a);
+            auto &bpb = game.buildingProperties.at(type_b);
+            if (bpa.harvest != bpb.harvest) {
+                return bpa.harvest;
+            } else if (bpa.harvest && bpa.produceScore != bpb.produceScore) {
+                return bpa.produceScore > bpb.produceScore;
+            } else {
+                return p_a < p_b;
+            }
+        });
+        while (1) {
+            for (auto [p, type] : distribution) {
+                if (!game.planets[p].building || game.planets[p].building->buildingType != type)
+                    continue;
+                int balance = 0;
+                for (auto &g : game.planets[p].workerGroups) {
+                    if (game.players[g.playerIndex].teamIndex == game.players[game.myIndex].teamIndex)
+                        balance += g.number;
+                    else
+                        balance -= g.number;
+                }
+                for (auto from : precalc::near_planets[p]) {
+                    if (from != p) {
+                        for (int i = 2; i >= 0 && balance < 0; --i) {
+                            auto &controller = controllers[(int) *game.players[i].specialty];
+                            int c = getPlayersRobotsOnPlanet(i, from) - controller.reservedRobots[from];
+                            if (c > 0) {
+                                controller.move(from, p, c).start();
+                                balance += c;
+                            }
+                        }
+                        if (balance >= 0)
+                            break;
+                    }
+                }
+            }
+            co_await dispatchers[0].wait(1, constants::counterstrike_prior);
+        }
+    }).start();
+
     for (auto spec: EnumValues<Specialty>::list) {
         auto &distribution = distributions[(int) spec];
         auto &dispatcher = dispatchers[(int) spec];
-        make_coro([&](auto self) -> Task<void> {
+        auto &controller = controllers[(int) spec];
+
+        make_coro([&, spec](auto self) -> Task<void> {
             while (1) {
                 vector<int> my_planets(distribution.size());
                 ranges::copy(views::keys(distribution), my_planets.begin());
@@ -608,6 +663,9 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 int sum = 0;
                 for (size_t i = 0; i < attacks.size(); ++i) {
                     auto &v = attacks[i];
+                    auto [p, type] = distribution[i];
+                    if (!game.planets[p].building || game.planets[p].building->buildingType != type)
+                        v.clear();
                     for (auto[gn, d]: v) {
                         auto &g = groups[gn];
                         sum += g.count;
@@ -616,6 +674,20 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     }
                 }
                 cerr << "Sum attack: " << sum << " on tick " << game.currentTick << "\n";
+                if (spec == Specialty::COMBAT) {
+                    vector<pair<int, int>> free_robots;
+                    for (size_t i = 0; i < my_planets.size(); ++i) {
+                        int p = my_planets[i];
+                        int c = getPlayersRobotsOnPlanet(controller.playerId, p) - controller.reservedRobots[p];
+                        if (c) {
+                            free_robots.emplace_back(i, c);
+                        }
+                    }
+                    int def = setDefence<float>(attacks, groups, my_planets, free_robots, controller, 0.001);
+                    def_robots[(int) spec] = def;
+                } else {
+                    def_robots[(int) spec] = 0;
+                }
                 co_await dispatcher.wait(1, constants::static_robots_recalc_prior + 1);
             }
         }).start();
@@ -630,22 +702,18 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         spec_static_robots[(int) spec].resize(max_planet_index + 1);
     }
 
-    make_coro([&](auto self) -> Task<void> {
-
-    }).start();
-
     for (auto spec: EnumValues<Specialty>::list) {
         auto &dispatcher = dispatchers[(int) spec];
         auto &transfers = spec_transfers[(int) spec];
         auto &controller = controllers[(int) spec];
         auto &distribution = distributions[(int) spec];
         auto &batching_factor = spec_batching_factor[(int) spec];
-        auto start_planet = start_planets[(int) spec];
+        auto &start_planet = start_planets[(int) spec];
         auto &stone_required = spec_stone_required[(int) spec];
         auto &transfers_index = spec_transfers_index[(int) spec];
         auto &flow = spec_flow[(int) spec];
         auto &static_robots = spec_static_robots[(int) spec];
-        make_coro([&](auto self) -> Task<void> {
+        make_coro([&, spec](auto self) -> Task<void> {
             vector<Fraction<long long>> pre_static_robots(max_planet_index + 1);
             while (1) {
                 // check rush
@@ -680,6 +748,11 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
                 robots[(int) Specialty::LOGISTICS] = max(robots[(int) Specialty::LOGISTICS] - monitors, 0);
 
+                for (auto spec : EnumValues<Specialty>::list) {
+                    robots[(int) spec] -= def_robots[(int) spec];
+                    robots[(int) spec] = max(0, robots[(int) spec]);
+                }
+
                 // Use combat robots for interception
                 // for (auto &g : game.flyingWorkerGroups) {
                 //     if (g.playerIndex != game.myIndex) {
@@ -695,7 +768,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 auto scheme = getTransfersByDistribution<double>(distribution, robots, 0.001);
                 auto &prod = scheme.prod;
                 auto new_transfers = views::iota((size_t) 0, scheme.transfers.size()) | views::filter([&](size_t i) {
-                    return scheme.specialty[i] == precalc::my_specialty;
+                    return scheme.specialty[i] == spec;
                 }) | views::transform([&](size_t i) -> auto & {
                     return scheme.transfers[i];
                 });
@@ -765,8 +838,8 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 flow.resize(transfers.size(), 0);
                 cerr << prod << " robots per tick\n";
 
-                batching_factor = ceil(Fraction<long long>(ranges::reduce(transfers | views::transform([](auto &t) {
-                    return precalc::real_distance(t.from, t.to);
+                batching_factor = ceil(Fraction<long long>(ranges::reduce(transfers | views::transform([spec](auto &t) {
+                    return precalc::spec_real_distance(spec, t.from, t.to);
                 }), 0), game.maxFlyingWorkerGroups));
 
                 batching_factor = max(1, batching_factor);
@@ -779,7 +852,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
                 for (size_t i = 0; i < distribution.size(); ++i) {
                     auto p = distribution[i].first;
-                    pre_static_robots[p] = scheme.static_robots[i][(int) precalc::my_specialty];
+                    pre_static_robots[p] = scheme.static_robots[i][(int) spec];
                     pre_static_robots[p].round_to_denom(constants::max_valid_flow_denom);
                 }
 
@@ -872,7 +945,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                                         int cnt = min(game.planets[start_planet].resources[Resource::STONE]
                                                       -
                                                       controller.reservedResources[start_planet][(int) Resource::STONE],
-                                                      getMyRobotsOnPlanet(start_planet) -
+                                                      getPlayersRobotsOnPlanet(controller.playerId, start_planet) -
                                                       controller.reservedRobots[start_planet]
                                         );
                                         cnt = min(cnt, need_robots);
@@ -965,11 +1038,11 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             }
         }).start();
 
-        auto group_loop = [&](auto self, vector<int> path, int cnt) -> Task<void> {
+        auto group_loop = [&, spec](auto self, vector<int> path, int cnt) -> Task<void> {
             int len = 0;
             for (auto i: path) {
                 auto[from, to, cnt, res] = transfers[i];
-                len += precalc::real_distance(from, to);
+                len += precalc::spec_real_distance(spec, from, to);
             }
             for (auto i: path) {
                 flow[i] += Fraction(cnt, len);
@@ -996,7 +1069,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 ++next_index;
                 if (next_index == path.size())
                     next_index = 0;
-                if (int d = cnt - (getMyRobotsOnPlanet(from) - controller.reservedRobots[from] - static_robots[from]);
+                if (int d = cnt - (getPlayersRobotsOnPlanet(controller.playerId, from) - controller.reservedRobots[from] - static_robots[from]);
                         d > 0) {
                     d = min(d, cnt);
                     for (auto i: path) {
@@ -1033,12 +1106,12 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
 
         auto &transfers_index = spec_transfers_index[(int) spec];
 
-        make_coro([&](auto self) -> Task<void> {
+        make_coro([&, group_loop](auto self) -> Task<void> {
             while (1) {
                 for (size_t i = 0; i < transfers.size(); ++i) {
                     auto[from, to, cnt, res] = transfers[i];
                     while (flow[i] < cnt) {
-                        int robots = getMyRobotsOnPlanet(from) - controller.reservedRobots[from] - static_robots[from];
+                        int robots = getPlayersRobotsOnPlanet(controller.playerId, from) - controller.reservedRobots[from] - static_robots[from];
                         if (robots <= 0)
                             break;
                         vector<char> used(max_planet_index + 1, 0);
@@ -1115,7 +1188,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
             }
         }).start();
 
-        tasks.emplace_back(make_coro([&](auto self) -> Task<void> {
+        tasks.emplace_back(make_coro([&, spec](auto self) -> Task<void> {
             co_await dispatcher.wait(0, constants::free_robots_prior);
             while (1) {
                 flows::FlowGraph g(max_planet_index + 1);
@@ -1126,12 +1199,12 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     auto[from, to, cnt, res] = transfers[i];
                     if (game.planets[from].building && flow[i] < cnt) {
                         outputs.emplace_back(from);
-                        ASSERT(ceil(precalc::real_distance(from, to) * (cnt - flow[i])) > 0);
-                        g.addEdge(from, t, 0, ceil(precalc::real_distance(from, to) * (cnt - flow[i])));
+                        ASSERT(ceil(precalc::spec_real_distance(spec, from, to) * (cnt - flow[i])) > 0);
+                        g.addEdge(from, t, 0, ceil(precalc::spec_real_distance(spec, from, to) * (cnt - flow[i])));
                     }
                 }
                 for (auto i: views::keys(game.planets)) {
-                    int balance = getMyRobotsOnPlanet(i) - controller.reservedRobots[i] - static_robots[i] +
+                    int balance = getPlayersRobotsOnPlanet(controller.playerId, i) - controller.reservedRobots[i] - static_robots[i] +
                                   controller.onWayTo[i];
                     if (balance > 0) {
                         // cerr << balance << " free robots on planet " << i << " in tick " << game.currentTick << "\n";
@@ -1149,7 +1222,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 outputs.erase(to_remove.begin(), to_remove.end());
                 for (auto i: inputs) {
                     for (auto o: outputs) {
-                        g.addEdge(i, o, precalc::d[i][o]);
+                        g.addEdge(i, o, precalc::get_spec_d(spec)[i][o]);
                     }
                 }
 
@@ -1163,15 +1236,15 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     }
                 }
                 for (auto i: views::keys(game.planets)) {
-                    int c = getMyRobotsOnPlanet(i) - controller.reservedRobots[i];
+                    int c = getPlayersRobotsOnPlanet(controller.playerId, i) - controller.reservedRobots[i];
                     if (c > 0 && ranges::find_if(distribution, [i = int(i)](auto &x) { return x.first == i; }) ==
                                  distribution.end()) {
                         auto filtered = distribution | views::filter([](auto &x) {
                             auto[p, type] = x;
                             return game.planets[p].building && game.planets[p].building->buildingType == type;
                         });
-                        auto it = ranges::min_element(filtered, [i](auto &a, auto &b) {
-                            return precalc::d[i][a.first] < precalc::d[i][b.first];
+                        auto it = ranges::min_element(filtered, [i, spec](auto &a, auto &b) {
+                            return precalc::get_spec_d(spec)[i][a.first] < precalc::get_spec_d(spec)[i][b.first];
                         });
                         if (it != filtered.end())
                             controller.move(i, it->first, c).start();
