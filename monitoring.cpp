@@ -8,9 +8,11 @@ using namespace model;
 using namespace std;
 using namespace precalc;
 
+bool enable_monitoring = 1;
+
 coro::Task<void> monitor_planet(ActionController &controller, int from, int planet) {
     ASSERT(game.players[controller.playerId].specialty == Specialty::LOGISTICS);
-    while (1) {
+    while (enable_monitoring) {
         bool under_attack = 0;
         auto enemy_groups = game.flyingWorkerGroups | views::filter([](auto &g) {
             return game.players[g.playerIndex].teamIndex != game.players[game.myIndex].teamIndex;

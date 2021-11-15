@@ -572,11 +572,17 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 return p_a < p_b;
             }
         });
+        int last_count = getMyTeamRobotsCount();
         while (1) {
+            if (getMyTeamRobotsCount() < 40)
+                enable_monitoring = 0;
             for (auto [p, type] : distribution) {
                 if (!game.planets[p].building || game.planets[p].building->buildingType != type)
                     continue;
                 int balance = 0;
+                if (type == BuildingType::FARM && getMyTeamRobotsCount() <= last_count) {
+                    balance -= 100;
+                }
                 for (auto &g : game.planets[p].workerGroups) {
                     if (game.players[g.playerIndex].teamIndex == game.players[game.myIndex].teamIndex)
                         balance += g.number;
@@ -598,6 +604,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     }
                 }
             }
+            last_count = getMyTeamRobotsCount();
             co_await dispatchers[0].wait(1, constants::counterstrike_prior);
         }
     }).start();
