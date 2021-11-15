@@ -602,10 +602,19 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         }
     }).start();
 
+    array<int, EnumValues<Specialty>::list.size()> spec_batching_factor;
+    array<vector<int>, EnumValues<Specialty>::list.size()> spec_static_robots;
+
+    for (auto spec: EnumValues<Specialty>::list) {
+        spec_batching_factor[(int) spec] = 1;
+        spec_static_robots[(int) spec].resize(max_planet_index + 1);
+    }
+
     for (auto spec: EnumValues<Specialty>::list) {
         auto &distribution = distributions[(int) spec];
         auto &dispatcher = dispatchers[(int) spec];
         auto &controller = controllers[(int) spec];
+        auto &static_robots = spec_static_robots[(int) spec];
 
         make_coro([&, spec](auto self) -> Task<void> {
             while (1) {
@@ -664,7 +673,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                 for (size_t i = 0; i < attacks.size(); ++i) {
                     auto &v = attacks[i];
                     auto [p, type] = distribution[i];
-                    if (!game.planets[p].building || game.planets[p].building->buildingType != type)
+                    if (type != BuildingType::FARM)
                         v.clear();
                     for (auto[gn, d]: v) {
                         auto &g = groups[gn];
@@ -674,12 +683,15 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
                     }
                 }
                 cerr << "Sum attack: " << sum << " on tick " << game.currentTick << "\n";
-                if (spec == Specialty::COMBAT) {
+                if (spec == Specialty::COMBAT
+                    || spec == Specialty::PRODUCTION && game.currentTick > 0) {
                     vector<pair<int, int>> free_robots;
                     for (size_t i = 0; i < my_planets.size(); ++i) {
                         int p = my_planets[i];
                         int c = getPlayersRobotsOnPlanet(controller.playerId, p) - controller.reservedRobots[p];
-                        if (c) {
+                        if (spec == Specialty::PRODUCTION)
+                            c -= static_robots[p];
+                        if (c > 0) {
                             free_robots.emplace_back(i, c);
                         }
                     }
@@ -693,14 +705,7 @@ Task<void> main_coro(array<Dispatcher, EnumValues<Specialty>::list.size()> &disp
         }).start();
     }
 
-    array<int, EnumValues<Specialty>::list.size()> spec_batching_factor;
-    array<vector<int>, EnumValues<Specialty>::list.size()> spec_static_robots;
     array<vector<Fraction<long long>>, EnumValues<Specialty>::list.size()> spec_flow;
-
-    for (auto spec: EnumValues<Specialty>::list) {
-        spec_batching_factor[(int) spec] = 1;
-        spec_static_robots[(int) spec].resize(max_planet_index + 1);
-    }
 
     for (auto spec: EnumValues<Specialty>::list) {
         auto &dispatcher = dispatchers[(int) spec];
